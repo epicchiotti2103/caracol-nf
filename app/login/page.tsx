@@ -5,6 +5,9 @@ import { useAuth } from "@/lib/auth-context";
 import { API_BASE_URL } from "@/lib/config";
 import { Eye, EyeOff, AlertCircle, Loader2 } from "lucide-react";
 
+const HUB_URL = process.env.NEXT_PUBLIC_HUB_URL || "https://app.aeobr.com.br";
+const FORGOT_PASSWORD_URL = `${HUB_URL}/recuperar-senha`;
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -132,9 +135,12 @@ export default function LoginPage() {
             </div>
 
             <div className="flex items-center justify-end">
-              <button type="button" className="text-xs text-muted hover:text-foreground hover:underline">
+              <a
+                href={FORGOT_PASSWORD_URL}
+                className="text-xs text-muted transition-colors hover:text-foreground hover:underline"
+              >
                 Esqueci minha senha
-              </button>
+              </a>
             </div>
 
             <button
