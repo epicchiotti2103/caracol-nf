@@ -1,36 +1,26 @@
-import { AppShell } from "@/components/app-shell";
-import { PageHeader, Panel, EmptyState } from "@/components/ui";
+"use client";
 
-export default function NfDashboard() {
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
+import { Loader2 } from "lucide-react";
+
+export default function HomeRedirect() {
+  const router = useRouter();
+  const { user, isAdmin, loading } = useAuth();
+
+  useEffect(() => {
+    if (loading) return;
+    if (!user) {
+      router.replace("/login");
+      return;
+    }
+    router.replace(isAdmin ? "/admin" : "/dashboard");
+  }, [user, isAdmin, loading, router]);
+
   return (
-    <AppShell>
-      <PageHeader
-        title="Dashboard"
-        description="Visao geral das notas fiscais da empresa."
-      />
-
-      <div className="grid gap-4 md:grid-cols-4">
-        {[
-          { label: "NFs emitidas (mes)", value: "—" },
-          { label: "A vencer", value: "—" },
-          { label: "Atrasadas", value: "—" },
-          { label: "Total em aberto", value: "R$ —" }
-        ].map((card) => (
-          <div key={card.label} className="rounded border border-border bg-surface p-4">
-            <div className="text-[12px] text-muted">{card.label}</div>
-            <div className="mt-2 text-xl font-semibold">{card.value}</div>
-          </div>
-        ))}
-      </div>
-
-      <Panel title="Atividade recente" description="Ultimas NFs e movimentacoes">
-        <div className="p-4">
-          <EmptyState
-            title="Sem dados ainda"
-            description="O backend de NF ainda nao foi conectado. Quando estiver pronto, aqui aparece a lista das ultimas notas."
-          />
-        </div>
-      </Panel>
-    </AppShell>
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+    </div>
   );
 }

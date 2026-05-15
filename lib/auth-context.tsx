@@ -1,8 +1,9 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
+import { isAdminEmail } from "@/lib/mock";
 
 interface User {
   id: string;
@@ -13,6 +14,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
+  isAdmin: boolean;
   loading: boolean;
   login: (token: string, userData: User) => void;
   logout: () => void;
@@ -74,8 +76,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/login");
   };
 
+  const isAdmin = useMemo(() => isAdminEmail(user?.email), [user?.email]);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, isAdmin, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
