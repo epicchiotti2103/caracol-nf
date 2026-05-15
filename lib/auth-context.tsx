@@ -26,7 +26,7 @@ interface AuthContextType {
   user: User | null;
   isAdmin: boolean;
   loading: boolean;
-  login: (token: string, userData: User) => void;
+  login: (accessToken: string, refreshToken: string, userData: User) => void;
   logout: () => void;
 }
 
@@ -63,9 +63,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   }, []);
 
-  const login = (token: string, userData: User) => {
+  const login = (accessToken: string, refreshToken: string, userData: User) => {
     const opts = cookieOpts();
-    Cookies.set("auth_token", token, opts);
+    Cookies.set("auth_token", accessToken, opts);
+    Cookies.set("refresh_token", refreshToken, opts);
     Cookies.set("user_data", JSON.stringify(userData), opts);
     if (typeof window !== "undefined") {
       localStorage.removeItem("user_data");
@@ -78,6 +79,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const opts = cookieOpts();
     const removeOpts = opts.domain ? { domain: opts.domain } : undefined;
     Cookies.remove("auth_token", removeOpts);
+    Cookies.remove("refresh_token", removeOpts);
     Cookies.remove("user_data", removeOpts);
     if (typeof window !== "undefined") {
       localStorage.removeItem("user_data");

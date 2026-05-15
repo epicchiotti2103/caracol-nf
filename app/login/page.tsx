@@ -39,7 +39,7 @@ export default function LoginPage() {
       }
 
       const data = await response.json();
-      login(data.access_token, data.user);
+      login(data.access_token, data.refresh_token, data.user);
     } catch (err: any) {
       setError(err.message);
     } finally {
