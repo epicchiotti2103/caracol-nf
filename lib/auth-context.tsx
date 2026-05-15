@@ -20,6 +20,16 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const ROOT_DOMAIN = ".aeobr.com.br";
+
+function cookieOpts(): Cookies.CookieAttributes {
+  const isCrossSubdomain =
+    typeof window !== "undefined" && window.location.hostname.endsWith(ROOT_DOMAIN);
+  return isCrossSubdomain
+    ? { expires: 7, domain: ROOT_DOMAIN, secure: true, sameSite: "lax" }
+    : { expires: 7 };
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -27,24 +37,39 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const token = Cookies.get("auth_token");
-    const savedUser = typeof window !== "undefined" ? localStorage.getItem("user_data") : null;
-
-    if (token && savedUser) {
-      setUser(JSON.parse(savedUser));
+    let userDataStr: string | undefined = Cookies.get("user_data");
+    if (!userDataStr && typeof window !== "undefined") {
+      userDataStr = localStorage.getItem("user_data") || undefined;
+    }
+    if (token && userDataStr) {
+      try {
+        setUser(JSON.parse(userDataStr));
+      } catch (e) {
+        // ignore malformed payload
+      }
     }
     setLoading(false);
   }, []);
 
   const login = (token: string, userData: User) => {
-    Cookies.set("auth_token", token, { expires: 7 });
-    localStorage.setItem("user_data", JSON.stringify(userData));
+    const opts = cookieOpts();
+    Cookies.set("auth_token", token, opts);
+    Cookies.set("user_data", JSON.stringify(userData), opts);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("user_data");
+    }
     setUser(userData);
     router.push("/");
   };
 
   const logout = () => {
-    Cookies.remove("auth_token");
-    localStorage.removeItem("user_data");
+    const opts = cookieOpts();
+    const removeOpts = opts.domain ? { domain: opts.domain } : undefined;
+    Cookies.remove("auth_token", removeOpts);
+    Cookies.remove("user_data", removeOpts);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("user_data");
+    }
     setUser(null);
     router.push("/login");
   };
