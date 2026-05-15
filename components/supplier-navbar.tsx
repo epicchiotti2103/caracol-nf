@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
@@ -21,9 +22,14 @@ export function SupplierNavbar() {
         <div className="flex h-14 items-center justify-between">
           <div className="flex items-center gap-6">
             <Link href="/dashboard" className="flex items-center gap-2.5">
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-bold text-black">
-                NF
-              </div>
+              <Image
+                src="/logo-caracol.png"
+                alt="Caracol"
+                width={120}
+                height={32}
+                priority
+                className="h-7 w-auto sm:h-8"
+              />
               <span className="hidden text-sm font-semibold tracking-wide text-orange-50 sm:block">
                 Notas Fiscais
               </span>
