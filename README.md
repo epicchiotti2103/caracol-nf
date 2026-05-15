@@ -23,6 +23,11 @@ UI montada, login conectado ao mesmo Supabase Auth do Tracker. Backend de NF ain
 - `/login` — Login conectado ao Supabase
 - Sidebar com link "Voltar ao hub"
 
+## Controle de acesso
+
+- **Quem e admin** vem do backend (`user.hub_role === "admin"`, exposto como `useAuth().isAdmin`). Nao ha mais lista hardcoded de emails — a fonte de verdade e o Supabase.
+- **Quem pode abrir o app** e validado pelo `BootstrapGate` (`components/nf/bootstrap-gate.tsx`): apos o login, chama `GET /api/v1/hub/me/apps` e so libera renderizar se o slug `nf` aparecer na lista. Quem nao tem acesso e redirecionado pra `app.aeobr.com.br?reason=no_access_nf`. Mesmo padrao do Tracker. Cache em memoria durante a sessao, limpo no logout.
+
 ## Como rodar (Codespaces ou local)
 
 ```bash

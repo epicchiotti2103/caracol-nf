@@ -1,17 +1,5 @@
 import type { Invoice, Supplier } from "@/types";
 
-// Emails considerados admin enquanto nao ha tabela `admins` no banco.
-// Quando integrar com Supabase, trocar por consulta a `users` (role admin/user).
-export const ADMIN_EMAILS = [
-  "du_sp12@hotmail.com",
-  "admin@caracol.com.br"
-];
-
-export function isAdminEmail(email: string | null | undefined): boolean {
-  if (!email) return false;
-  return ADMIN_EMAILS.includes(email.toLowerCase().trim());
-}
-
 export const MOCK_SUPPLIERS: Supplier[] = [
   {
     id: "sup-1",

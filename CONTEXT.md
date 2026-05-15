@@ -79,6 +79,24 @@ Mesmo SSO via cookie no dominio raiz `.aeobr.com.br` (igual hub e tracker). Em p
 
 **O backend que processa o login** e o do Tracker (`https://trk.aeobr.com.br/api/v1/auth/login`). Nao foi criado backend proprio do NF ainda. Quando criar, vai compartilhar o mesmo Supabase e validar o token JWT do mesmo jeito.
 
+### Controle de admin
+
+- `useAuth().isAdmin` deriva direto de `user.hub_role === "admin"`, vindo do backend no payload do `/auth/login`. **Nao ha mais lista hardcoded de emails** (`ADMIN_EMAILS`/`isAdminEmail` foram removidos de `lib/mock.ts`). A fonte de verdade e a tabela `users` no Supabase.
+- Em client components, usar `const { isAdmin } = useAuth()`.
+- Em server components / middleware, ler o cookie `user_data` e checar `hub_role === "admin"` — manter o mesmo criterio.
+
+### Gate de acesso ao app
+
+`components/nf/bootstrap-gate.tsx` envolve a arvore dentro do `RootLayout` (depois do `AuthProvider`/`ToastProvider`). Fluxo:
+
+1. Espera o `AuthProvider` carregar.
+2. Em `/login` ou quando nao ha `user`, libera direto.
+3. Chama `GET /api/v1/hub/me/apps` via `apiFetch`.
+4. Se a resposta tem app com `slug === "nf"`, renderiza filhos. Caso contrario, mostra tela "Sem acesso ao NF" e redireciona pra `${HUB_URL}?reason=no_access_nf`.
+5. Resultado fica em cache na memoria por `userId`. O cache e limpo automaticamente quando `user` vira `null` (logout via `AuthProvider.logout()`).
+
+Mesma logica do `components/tracker/bootstrap-gate.tsx`, so muda o slug e a copy. Quando a fase 2/3 do roadmap chegar (permissoes intra-app de NF), adicionar um fail-safe interno aqui — hoje so checa o acesso ao app.
+
 ## Variaveis de ambiente (Vercel)
 
 ```
@@ -95,6 +113,8 @@ NEXT_PUBLIC_HUB_URL=https://app.aeobr.com.br
 - [x] Deploy na Vercel
 - [x] Dominio `nf.aeobr.com.br` configurado com HTTPS
 - [x] CORS liberado no backend do Tracker
+- [x] Gate de acesso ao app via `GET /api/v1/hub/me/apps` (slug `nf`)
+- [x] `ADMIN_EMAILS` hardcoded removido — admin agora vem de `user.hub_role`
 - [ ] **Modelo de dados** (quais campos da NF guardar)
 - [ ] **Tabelas no Supabase** (`nf_notes`, `nf_issuers`, etc)
 - [ ] **Backend FastAPI** com rotas `/api/v1/nf/*`
