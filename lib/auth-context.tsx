@@ -3,13 +3,23 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import Cookies from "js-cookie";
 import { useRouter } from "next/navigation";
-import { isAdminEmail } from "@/lib/mock";
 
-interface User {
+export type Tipo = "interno" | "externo";
+export type HubRole =
+  | "admin"
+  | "campanha"
+  | "cliente_tracker"
+  | "cliente_mobile"
+  | "publisher_tracker"
+  | "publisher_mobile";
+
+export interface User {
   id: string;
   email: string;
   name: string;
   role: string;
+  tipo?: Tipo | null;
+  hub_role?: HubRole | null;
 }
 
 interface AuthContextType {
@@ -76,7 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/login");
   };
 
-  const isAdmin = useMemo(() => isAdminEmail(user?.email), [user?.email]);
+  const isAdmin = useMemo(() => user?.hub_role === "admin", [user?.hub_role]);
 
   return (
     <AuthContext.Provider value={{ user, isAdmin, loading, login, logout }}>
