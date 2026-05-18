@@ -58,7 +58,7 @@ caracol-nf/
     toast-context.tsx            Toasts globais
     nf-role-context.tsx          Papel intra-NF + helper langForRole
     i18n.ts                      Strings bilingual + formatadores
-  types/index.ts                 Invoice, InvoiceStatus, NfRole, NfUser, DashboardSummary
+  types/index.ts                 Invoice (com assignee), InvoiceStatus, NfRole, NfUser, DashboardSummary, MeRoleResponse
   middleware.ts                  Redireciona pra /login se nao autenticado
 ```
 
@@ -69,13 +69,14 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `POST /auth/login` — login
 - `POST /auth/refresh` — refresh do token (transparente via `lib/api.ts`)
 - `GET /hub/me/apps` — apps do user (gate de acesso)
-- `GET /nf/me/role` — papel intra-NF (gate intra-app)
+- `GET /nf/me/role` — `{role, pending_assigned_count}` — papel intra-NF + qtde de NFs `em_analise` atribuidas ao user (usado pelo banner "aguardando voce")
 - `GET /nf/invoices` — lista (filtrada por papel no backend)
 - `GET /nf/invoices/{id}` — detalhe
 - `GET /nf/invoices/{id}/pdf` — `{url}` assinada (5min)
 - `POST /nf/invoices` — cria (multipart, campo `pdf` opcional)
 - `PATCH /nf/invoices/{id}/status` — `{status, notes_supplier?, notes_internal?}`; regras de papel no backend
 - `PATCH /nf/invoices/{id}/notes` — `{notes_supplier?, notes_internal?}` (admin OU adm_campanha) — edita notas sem mudar status
+- `PATCH /nf/invoices/{id}/assignee` — `{assignee_id: string | null}` (admin OU adm_campanha) — define quem revisa a NF. `POST /invoices` ja faz auto-assign (random adm_campanha → fallback admin → null)
 - `GET /nf/dashboard/summary` — `{em_analise_count, a_pagar_amount, pagas_30d_amount}` (admin)
 - `GET /nf/users` — lista users com `nf_role` (admin)
 - `PUT /nf/users/{user_id}/role` — `{role: NfRole | null}` (admin)
@@ -108,7 +109,9 @@ Campos de auditoria persistidos pelo backend:
 
 Ambos os campos de notas podem ser editados a qualquer hora (independente do status) via `PATCH /nf/invoices/{id}/notes` por admin/adm_campanha. O detalhe da NF mostra paineis editaveis pra esses papeis; publisher so ve `notes_supplier` em modo read-only (e so se ela tiver conteudo).
 
-O frontend exibe nome do user (`approved_by_name`, `paid_by_name`) se o backend retornar; senao mostra o UUID.
+Cada NF tambem tem `assignee_id` / `assignee_name` (responsavel pela revisao). `POST /invoices` faz auto-assign sorteando um adm_campanha; se nao houver, cai pra admin; se nenhum existir, fica null. Admin/adm_campanha podem reatribuir a qualquer momento via `PATCH /nf/invoices/{id}/assignee` no detalhe.
+
+O frontend exibe `publisher_name`, `approved_by_name`, `paid_by_name` e `assignee_name` populados pelo backend. UUIDs nao aparecem mais na UI — fallback e "—".
 
 ## Bilinguismo
 
@@ -163,6 +166,7 @@ NEXT_PUBLIC_HUB_URL=https://app.aeobr.com.br
 - [x] Workflow de status (em_analise → aprovada → paga, recusada)
 - [x] Auditoria (approved_by, approved_at, paid_by, paid_at)
 - [x] Notas separadas: `notes_supplier` (visivel ao publisher) + `notes_internal` (so admin/adm_campanha) com endpoint `PATCH /nf/invoices/{id}/notes`
+- [x] Campo `assignee_id` (responsavel) + auto-assign no POST + reatribuicao via `PATCH /nf/invoices/{id}/assignee` + banner "N NFs aguardando voce" no topo da lista (consumindo `pending_assigned_count` do `GET /nf/me/role`)
 - [x] Dashboard admin (em_analise_count, a_pagar_amount, pagas_30d_amount)
 - [x] Gestao de papeis intra-NF (`/admin/usuarios-nf`)
 - [x] Logo Caracol clicavel volta pro Hub

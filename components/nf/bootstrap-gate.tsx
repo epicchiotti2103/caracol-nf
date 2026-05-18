@@ -7,7 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import { HUB_URL } from "@/lib/config";
 import { NfRoleProvider } from "@/lib/nf-role-context";
-import type { NfRole } from "@/types";
+import type { MeRoleResponse, NfRole } from "@/types";
 
 type HubApp = {
   id: string;
@@ -21,7 +21,7 @@ type HubApp = {
 type GateState =
   | { status: "idle" }
   | { status: "checking" }
-  | { status: "ok"; role: NfRole }
+  | { status: "ok"; role: NfRole; pendingAssignedCount: number }
   | { status: "no-app" }
   | { status: "no-role" }
   | { status: "invalid-role" }
@@ -31,7 +31,11 @@ const VALID_HUB_ROLES = new Set(["admin", "user", "viewer", "client"]);
 
 // Cache em memoria por sessao. Limpo no logout (quando user vira null).
 let appsCache: { userId: string; apps: HubApp[] } | null = null;
-let roleCache: { userId: string; role: NfRole | null } | null = null;
+let roleCache: {
+  userId: string;
+  role: NfRole | null;
+  pendingAssignedCount: number;
+} | null = null;
 
 export function clearBootstrapGateCache() {
   appsCache = null;
@@ -82,7 +86,11 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
         setState({ status: "no-role" });
         return;
       }
-      setState({ status: "ok", role: roleCache.role });
+      setState({
+        status: "ok",
+        role: roleCache.role,
+        pendingAssignedCount: roleCache.pendingAssignedCount
+      });
       return;
     }
 
@@ -107,14 +115,17 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // Step 2: papel intra-NF
+        // Step 2: papel intra-NF + contagem de NFs aguardando o user
         let role: NfRole | null;
+        let pendingAssignedCount = 0;
         if (roleCache && roleCache.userId === user.id) {
           role = roleCache.role;
+          pendingAssignedCount = roleCache.pendingAssignedCount;
         } else {
-          const res: { role: NfRole | null } = await apiFetch("/nf/me/role");
+          const res: MeRoleResponse = await apiFetch("/nf/me/role");
           role = res?.role ?? null;
-          roleCache = { userId: user.id, role };
+          pendingAssignedCount = Math.max(0, Number(res?.pending_assigned_count) || 0);
+          roleCache = { userId: user.id, role, pendingAssignedCount };
         }
         if (cancelled) return;
 
@@ -122,7 +133,7 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
           setState({ status: "no-role" });
           return;
         }
-        setState({ status: "ok", role });
+        setState({ status: "ok", role, pendingAssignedCount });
       } catch (err: any) {
         if (cancelled) return;
         setState({ status: "error", message: err?.message || "Falha ao validar acesso" });
@@ -226,5 +237,9 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <NfRoleProvider role={state.role}>{children}</NfRoleProvider>;
+  return (
+    <NfRoleProvider role={state.role} pendingAssignedCount={state.pendingAssignedCount}>
+      {children}
+    </NfRoleProvider>
+  );
 }

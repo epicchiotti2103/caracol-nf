@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   Download,
   Loader2,
+  User as UserIcon,
   X
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -16,7 +17,7 @@ import { useNfRole, langForRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
 import { fmtCurrency, fmtDate, fmtDateTime, fmtRefMonth } from "@/lib/i18n";
-import type { Invoice, InvoiceStatus } from "@/types";
+import type { Invoice, InvoiceStatus, NfUser } from "@/types";
 
 type Action = "approve" | "reject" | "pay";
 
@@ -46,6 +47,13 @@ function InvoiceDetail({ id }: { id: string }) {
   const [notesSupplier, setNotesSupplier] = useState("");
   const [notesInternal, setNotesInternal] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+
+  // Reatribuicao de responsavel (admin/adm_campanha)
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignableUsers, setAssignableUsers] = useState<NfUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [selectedAssignee, setSelectedAssignee] = useState<string>("");
+  const [savingAssignee, setSavingAssignee] = useState(false);
 
   const t = {
     back: lang === "pt" ? "Voltar" : "Back",
@@ -93,7 +101,19 @@ function InvoiceDetail({ id }: { id: string }) {
       lang === "pt"
         ? "Motivo (visivel ao fornecedor)"
         : "Reason (visible to supplier)",
-    rejectInternalNote: "Anotacao interna (opcional)"
+    rejectInternalNote: "Anotacao interna (opcional)",
+    // Responsavel
+    responsibleLabel: lang === "pt" ? "Responsavel" : "Reviewer",
+    noAssignee: lang === "pt" ? "Sem responsavel" : "Unassigned",
+    reassign: lang === "pt" ? "Reatribuir" : "Reassign",
+    assign: lang === "pt" ? "Atribuir" : "Assign",
+    assignTitle: lang === "pt" ? "Definir responsavel" : "Set reviewer",
+    assignNoOne: lang === "pt" ? "— sem responsavel —" : "— unassigned —",
+    assignSave: lang === "pt" ? "Salvar" : "Save",
+    assignedOk: lang === "pt" ? "Responsavel atualizado" : "Reviewer updated",
+    assignedFail:
+      lang === "pt" ? "Falha ao atualizar responsavel" : "Failed to update reviewer",
+    loadingUsersLabel: lang === "pt" ? "Carregando..." : "Loading..."
   };
 
   const load = async () => {
@@ -140,6 +160,50 @@ function InvoiceDetail({ id }: { id: string }) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  const openAssignModal = async () => {
+    setSelectedAssignee(invoice?.assignee_id || "");
+    setAssignOpen(true);
+    if (assignableUsers.length === 0) {
+      setLoadingUsers(true);
+      try {
+        const res: { items: NfUser[]; total: number } | NfUser[] =
+          await apiFetch("/nf/users");
+        const items = Array.isArray(res) ? res : res?.items || [];
+        // Filtra so admin / adm_campanha (publishers nao revisam)
+        setAssignableUsers(
+          items.filter(
+            (u) => u.nf_role === "admin" || u.nf_role === "adm_campanha"
+          )
+        );
+      } catch (err: any) {
+        toast.error(err?.message || t.assignedFail);
+      } finally {
+        setLoadingUsers(false);
+      }
+    }
+  };
+
+  const saveAssignee = async () => {
+    if (!invoice) return;
+    setSavingAssignee(true);
+    try {
+      const updated: Invoice = await apiFetch(
+        `/nf/invoices/${id}/assignee`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ assignee_id: selectedAssignee || null })
+        }
+      );
+      setInvoice(updated);
+      toast.success(t.assignedOk);
+      setAssignOpen(false);
+    } catch (err: any) {
+      toast.error(err?.message || t.assignedFail);
+    } finally {
+      setSavingAssignee(false);
+    }
+  };
 
   const downloadPdf = async () => {
     try {
@@ -246,6 +310,13 @@ function InvoiceDetail({ id }: { id: string }) {
         <StatusBadge status={invoice.status} lang={lang} />
       </div>
 
+      <AssigneeBlock
+        invoice={invoice}
+        role={role}
+        t={t}
+        onOpen={openAssignModal}
+      />
+
       <div className="space-y-4 rounded-xl border border-border bg-surface p-6">
         <Row label={t.amount} value={fmtCurrency(invoice.amount || 0, lang)} bold />
         <Row label={t.dueDate} value={fmtDate(invoice.due_date, lang)} />
@@ -259,7 +330,7 @@ function InvoiceDetail({ id }: { id: string }) {
                 ? `${invoice.publisher_name}${
                     invoice.publisher_email ? ` (${invoice.publisher_email})` : ""
                   }`
-                : invoice.publisher_email || invoice.publisher_id
+                : invoice.publisher_email || "—"
             }
           />
         )}
@@ -286,7 +357,7 @@ function InvoiceDetail({ id }: { id: string }) {
                 <p className="text-muted">
                   {t.approvedBy}:{" "}
                   <span className="font-medium text-foreground">
-                    {invoice.approved_by_name || invoice.approved_by}
+                    {invoice.approved_by_name || "—"}
                   </span>{" "}
                   {invoice.approved_at && (
                     <span className="text-xs">— {fmtDateTime(invoice.approved_at, lang)}</span>
@@ -300,7 +371,7 @@ function InvoiceDetail({ id }: { id: string }) {
                 <p className="text-muted">
                   {t.paidBy}:{" "}
                   <span className="font-medium text-foreground">
-                    {invoice.paid_by_name || invoice.paid_by}
+                    {invoice.paid_by_name || "—"}
                   </span>{" "}
                   {invoice.paid_at && (
                     <span className="text-xs">— {fmtDateTime(invoice.paid_at, lang)}</span>
@@ -384,6 +455,156 @@ function InvoiceDetail({ id }: { id: string }) {
           onConfirm={executeAction}
         />
       )}
+
+      {assignOpen && (
+        <AssignModal
+          t={t}
+          users={assignableUsers}
+          loading={loadingUsers}
+          saving={savingAssignee}
+          selected={selectedAssignee}
+          onSelect={setSelectedAssignee}
+          onCancel={() => setAssignOpen(false)}
+          onConfirm={saveAssignee}
+        />
+      )}
+    </div>
+  );
+}
+
+function AssigneeBlock({
+  invoice,
+  role,
+  t,
+  onOpen
+}: {
+  invoice: Invoice;
+  role: string;
+  t: any;
+  onOpen: () => void;
+}) {
+  const canManage = role === "admin" || role === "adm_campanha";
+
+  // Publisher: so ve o nome se houver. Sem botao.
+  if (!canManage) {
+    if (!invoice.assignee_name) return null;
+    return (
+      <div className="mb-6 flex items-center gap-2 rounded-xl border border-border bg-surface px-4 py-3">
+        <UserIcon className="h-4 w-4 text-muted" />
+        <p className="text-sm text-muted">
+          {t.responsibleLabel}:{" "}
+          <span className="font-medium text-foreground">
+            {invoice.assignee_name}
+          </span>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <UserIcon className="h-4 w-4 flex-shrink-0 text-muted" />
+        <p className="truncate text-sm text-muted">
+          {t.responsibleLabel}:{" "}
+          {invoice.assignee_name ? (
+            <span className="font-medium text-foreground">
+              {invoice.assignee_name}
+            </span>
+          ) : (
+            <span className="italic text-muted">{t.noAssignee}</span>
+          )}
+        </p>
+      </div>
+      <button
+        onClick={onOpen}
+        className="flex-shrink-0 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-background/60"
+      >
+        {invoice.assignee_id ? t.reassign : t.assign}
+      </button>
+    </div>
+  );
+}
+
+function AssignModal({
+  t,
+  users,
+  loading,
+  saving,
+  selected,
+  onSelect,
+  onCancel,
+  onConfirm
+}: {
+  t: any;
+  users: NfUser[];
+  loading: boolean;
+  saving: boolean;
+  selected: string;
+  onSelect: (v: string) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
+      onClick={onCancel}
+    >
+      <div
+        className="w-full max-w-md overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-border bg-zinc-950 px-6 py-4">
+          <p className="text-base font-semibold text-orange-50">{t.assignTitle}</p>
+          <button onClick={onCancel} className="text-orange-100/40 hover:text-orange-50">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="space-y-4 p-6">
+          {loading ? (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </div>
+          ) : (
+            <select
+              value={selected}
+              onChange={(e) => onSelect(e.target.value)}
+              className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
+            >
+              <option value="">{t.assignNoOne}</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name || u.email}{" "}
+                  {u.nf_role === "admin" ? "(admin)" : "(adm. campanha)"}
+                </option>
+              ))}
+            </select>
+          )}
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={onCancel}
+              disabled={saving}
+              className="flex-1 rounded-lg border border-border py-2.5 text-sm font-medium text-foreground hover:bg-background"
+            >
+              {t.cancel}
+            </button>
+            <button
+              onClick={onConfirm}
+              disabled={loading || saving}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t.saving}
+                </>
+              ) : (
+                t.assignSave
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -50,6 +50,12 @@ Campos de auditoria: `approved_by` + `approved_at` (quem aprovou); `paid_by` + `
 
 Notas em 2 campos: `notes_supplier` (visivel a todos, mostrada ao publisher — carrega motivo de recusa quando aplicavel) e `notes_internal` (so admin/adm_campanha veem; backend mascara como `null` no payload do publisher). Editaveis a qualquer hora via `PATCH /nf/invoices/{id}/notes`.
 
+## Responsavel pela NF
+
+Cada NF tem um campo opcional `assignee_id` (preenchido automaticamente no `POST /invoices` por um adm_campanha aleatorio, com fallback pra admin). Quem esta listado como responsavel ve, no topo da lista, um banner laranja "Voce tem N NFs aguardando voce" enquanto houver NFs `em_analise` atribuidas a ele. Clicar no banner ativa um filtro local ("mine") que mostra so essas. So admin/adm_campanha veem o banner — publisher recebe `pending_assigned_count = 0` do backend.
+
+No detalhe da NF, admin/adm_campanha veem o nome do responsavel e podem reatribuir via `PATCH /nf/invoices/{id}/assignee` (modal com `<select>` listando admins + adms de campanha; opcao "sem responsavel" zera). Publisher so ve o nome em modo read-only, traduzido como "Reviewer".
+
 ## Controle de acesso
 
 - **Admin do Hub** (`useAuth().isAdmin`) vem de `user.hub_role === "admin"`. Nao tem mais `ADMIN_EMAILS` hardcoded.

@@ -14,12 +14,19 @@ import {
   AlertCircle,
   Clock,
   CheckCircle,
-  DollarSign
+  DollarSign,
+  Inbox,
+  ChevronRight,
+  X
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { useAuth } from "@/lib/auth-context";
-import { useNfRole, langForRole } from "@/lib/nf-role-context";
+import {
+  useNfRole,
+  langForRole,
+  usePendingAssignedCount
+} from "@/lib/nf-role-context";
 import { apiFetch } from "@/lib/api";
 import { fmtCurrency, fmtDate, fmtRefMonth, i18n, tr } from "@/lib/i18n";
 import type { DashboardSummary, Invoice, InvoiceStatus } from "@/types";
@@ -44,6 +51,8 @@ function HomeContent() {
   const role = useNfRole();
   const lang = langForRole(role);
   const router = useRouter();
+  const { user } = useAuth();
+  const pendingAssignedCount = usePendingAssignedCount();
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -51,6 +60,11 @@ function HomeContent() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "todos">("todos");
+  const [mineOnly, setMineOnly] = useState(false);
+
+  // Banner so faz sentido pra admin/adm_campanha (publisher tem count = 0 do backend de qualquer jeito).
+  const showAssignedBanner =
+    (role === "admin" || role === "adm_campanha") && pendingAssignedCount > 0;
 
   const load = async () => {
     setLoading(true);
@@ -84,9 +98,14 @@ function HomeContent() {
       const matchStatus = statusFilter === "todos" || inv.status === statusFilter;
       const q = search.trim().toLowerCase();
       const matchSearch = !q || inv.invoice_number.toLowerCase().includes(q);
-      return matchStatus && matchSearch;
+      const matchMine =
+        !mineOnly ||
+        (!!user?.id &&
+          inv.assignee_id === user.id &&
+          inv.status === "em_analise");
+      return matchStatus && matchSearch && matchMine;
     });
-  }, [invoices, search, statusFilter]);
+  }, [invoices, search, statusFilter, mineOnly, user?.id]);
 
   const titlePt = role === "admin" ? "Painel admin" : "Notas fiscais";
   const subtitlePt =
@@ -136,6 +155,51 @@ function HomeContent() {
           )}
         </div>
       </div>
+
+      {showAssignedBanner && (
+        <button
+          type="button"
+          onClick={() => setMineOnly((v) => !v)}
+          className={`group mb-6 flex w-full items-center gap-3 rounded-xl border px-5 py-4 text-left transition-colors ${
+            mineOnly
+              ? "border-primary/60 bg-primary/20"
+              : "border-primary/30 bg-primary/10 hover:bg-primary/15"
+          }`}
+        >
+          <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary/20">
+            <Inbox className="h-5 w-5 text-primary" />
+          </div>
+          <div className="min-w-0 flex-1">
+            {mineOnly ? (
+              <p className="text-sm font-medium text-foreground">
+                Filtrando suas NFs ·{" "}
+                <span className="font-semibold text-primary">
+                  {pendingAssignedCount}
+                </span>
+              </p>
+            ) : (
+              <p className="text-sm text-foreground">
+                Voce tem{" "}
+                <span className="font-semibold text-primary">
+                  {pendingAssignedCount}{" "}
+                  {pendingAssignedCount === 1 ? "NF" : "NFs"}
+                </span>{" "}
+                aguardando voce
+              </p>
+            )}
+            <p className="mt-0.5 text-xs text-muted">
+              {mineOnly
+                ? "Clique pra remover o filtro"
+                : "Clique pra ver so as suas"}
+            </p>
+          </div>
+          {mineOnly ? (
+            <X className="h-4 w-4 flex-shrink-0 text-muted transition-colors group-hover:text-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 flex-shrink-0 text-muted transition-colors group-hover:text-foreground" />
+          )}
+        </button>
+      )}
 
       {role === "admin" && summary && (
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -277,19 +341,6 @@ function headersFor(role: string): string[] {
   if (role === "publisher") {
     return ["Invoice #", "Amount", "Due Date", "Reference Month", "Campaign", "Status", "PDF", ""];
   }
-  if (role === "adm_campanha") {
-    return [
-      "NF",
-      "Valor",
-      "Vencimento",
-      "Mes Ref",
-      "Campanha",
-      "Status",
-      "Publisher",
-      "PDF",
-      ""
-    ];
-  }
   return [
     "NF",
     "Valor",
@@ -298,6 +349,7 @@ function headersFor(role: string): string[] {
     "Campanha",
     "Status",
     "Publisher",
+    "Responsavel",
     "PDF",
     ""
   ];
@@ -355,6 +407,15 @@ function InvoiceRow({
         <td className="px-5 py-4">
           <p className="text-xs text-foreground">{invoice.publisher_name || "—"}</p>
           <p className="text-[11px] text-muted">{invoice.publisher_email || ""}</p>
+        </td>
+      )}
+      {role !== "publisher" && (
+        <td className="px-5 py-4">
+          <p className="text-xs text-foreground">
+            {invoice.assignee_name || (
+              <span className="text-muted">—</span>
+            )}
+          </p>
         </td>
       )}
       <td className="px-5 py-4">

@@ -20,6 +20,8 @@ export interface Invoice {
   publisher_id: string;
   publisher_name?: string | null;
   publisher_email?: string | null;
+  assignee_id?: string | null;
+  assignee_name?: string | null;
   approved_by?: string | null;
   approved_by_name?: string | null;
   approved_at?: string | null;
@@ -28,6 +30,12 @@ export interface Invoice {
   paid_at?: string | null;
   created_at: string;
   updated_at?: string | null;
+}
+
+// Response do GET /api/v1/nf/me/role
+export interface MeRoleResponse {
+  role: NfRole | null;
+  pending_assigned_count?: number;
 }
 
 export interface DashboardBucket {
