@@ -29,10 +29,15 @@ export interface Invoice {
   updated_at?: string | null;
 }
 
+export interface DashboardBucket {
+  count: number;
+  total_amount: number;
+}
+
 export interface DashboardSummary {
-  em_analise_count: number;
-  a_pagar_amount: number;        // soma de aprovadas
-  pagas_30d_amount: number;      // soma de pagas nos ultimos 30 dias
+  pending_review: DashboardBucket;  // status = em_analise
+  to_pay: DashboardBucket;          // status = aprovada
+  paid_last_30d: DashboardBucket;   // status = paga AND paid_at >= now - 30d
 }
 
 export interface NfUser {

@@ -56,8 +56,9 @@ function HomeContent() {
     setLoading(true);
     setError("");
     try {
-      const list: Invoice[] = await apiFetch("/nf/invoices");
-      setInvoices(Array.isArray(list) ? list : []);
+      const list: { items: Invoice[]; total: number } | Invoice[] = await apiFetch("/nf/invoices");
+      const items = Array.isArray(list) ? list : list?.items || [];
+      setInvoices(items);
       if (role === "admin") {
         try {
           const s: DashboardSummary = await apiFetch("/nf/dashboard/summary");
@@ -141,20 +142,20 @@ function HomeContent() {
           <StatCard
             icon={Clock}
             label="Em analise"
-            value={String(summary.em_analise_count)}
-            sub="aguardando aprovacao"
+            value={String(summary.pending_review?.count ?? 0)}
+            sub={`${fmtCurrency(summary.pending_review?.total_amount || 0, "pt")} em valor`}
           />
           <StatCard
             icon={DollarSign}
             label="A pagar"
-            value={fmtCurrency(summary.a_pagar_amount || 0, "pt")}
-            sub="aprovadas pendentes"
+            value={fmtCurrency(summary.to_pay?.total_amount || 0, "pt")}
+            sub={`${summary.to_pay?.count ?? 0} aprovadas pendentes`}
           />
           <StatCard
             icon={CheckCircle}
             label="Pagas (30d)"
-            value={fmtCurrency(summary.pagas_30d_amount || 0, "pt")}
-            sub="ultimos 30 dias"
+            value={fmtCurrency(summary.paid_last_30d?.total_amount || 0, "pt")}
+            sub={`${summary.paid_last_30d?.count ?? 0} ultimos 30 dias`}
           />
         </div>
       )}
