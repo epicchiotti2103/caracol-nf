@@ -6,6 +6,8 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import { HUB_URL } from "@/lib/config";
+import { NfRoleProvider } from "@/lib/nf-role-context";
+import type { NfRole } from "@/types";
 
 type HubApp = {
   id: string;
@@ -19,17 +21,21 @@ type HubApp = {
 type GateState =
   | { status: "idle" }
   | { status: "checking" }
-  | { status: "ok" }
+  | { status: "ok"; role: NfRole }
   | { status: "no-app" }
+  | { status: "no-role" }
   | { status: "invalid-role" }
   | { status: "error"; message: string };
 
-const VALID_ROLES = new Set(["admin", "user", "viewer", "client"]);
+const VALID_HUB_ROLES = new Set(["admin", "user", "viewer", "client"]);
 
+// Cache em memoria por sessao. Limpo no logout (quando user vira null).
 let appsCache: { userId: string; apps: HubApp[] } | null = null;
+let roleCache: { userId: string; role: NfRole | null } | null = null;
 
 export function clearBootstrapGateCache() {
   appsCache = null;
+  roleCache = null;
 }
 
 export function BootstrapGate({ children }: { children: React.ReactNode }) {
@@ -41,7 +47,7 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (skipGate) {
-      setState({ status: "ok" });
+      setState({ status: "idle" }); // sera tratado no render
       return;
     }
     if (loading) {
@@ -50,18 +56,33 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
     }
     if (!user) {
       appsCache = null;
-      setState({ status: "ok" });
+      roleCache = null;
+      setState({ status: "idle" });
       return;
     }
 
-    if (!user.role || !VALID_ROLES.has(user.role)) {
+    if (!user.role || !VALID_HUB_ROLES.has(user.role)) {
       setState({ status: "invalid-role" });
       return;
     }
 
-    if (appsCache && appsCache.userId === user.id) {
+    // Hit no cache: tem app + tem role -> ok direto
+    if (
+      appsCache &&
+      appsCache.userId === user.id &&
+      roleCache &&
+      roleCache.userId === user.id
+    ) {
       const has = appsCache.apps.some((a) => a.slug === "nf");
-      setState({ status: has ? "ok" : "no-app" });
+      if (!has) {
+        setState({ status: "no-app" });
+        return;
+      }
+      if (!roleCache.role) {
+        setState({ status: "no-role" });
+        return;
+      }
+      setState({ status: "ok", role: roleCache.role });
       return;
     }
 
@@ -69,12 +90,39 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
     setState({ status: "checking" });
     (async () => {
       try {
-        const res: HubApp[] = await apiFetch("/hub/me/apps");
+        // Step 1: apps do hub
+        let apps: HubApp[];
+        if (appsCache && appsCache.userId === user.id) {
+          apps = appsCache.apps;
+        } else {
+          const res: HubApp[] = await apiFetch("/hub/me/apps");
+          apps = Array.isArray(res) ? res : [];
+          appsCache = { userId: user.id, apps };
+        }
         if (cancelled) return;
-        const apps = Array.isArray(res) ? res : [];
-        appsCache = { userId: user.id, apps };
-        const has = apps.some((a) => a.slug === "nf");
-        setState({ status: has ? "ok" : "no-app" });
+
+        const hasApp = apps.some((a) => a.slug === "nf");
+        if (!hasApp) {
+          setState({ status: "no-app" });
+          return;
+        }
+
+        // Step 2: papel intra-NF
+        let role: NfRole | null;
+        if (roleCache && roleCache.userId === user.id) {
+          role = roleCache.role;
+        } else {
+          const res: { role: NfRole | null } = await apiFetch("/nf/me/role");
+          role = res?.role ?? null;
+          roleCache = { userId: user.id, role };
+        }
+        if (cancelled) return;
+
+        if (!role) {
+          setState({ status: "no-role" });
+          return;
+        }
+        setState({ status: "ok", role });
       } catch (err: any) {
         if (cancelled) return;
         setState({ status: "error", message: err?.message || "Falha ao validar acesso" });
@@ -119,6 +167,25 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
     );
   }
 
+  if (state.status === "no-role") {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-center text-foreground">
+        <div className="max-w-md space-y-3">
+          <h1 className="text-lg font-semibold">Perfil do NF nao configurado</h1>
+          <p className="text-sm text-muted">
+            Seu perfil no NF nao foi configurado. Fale com um admin do NF.
+          </p>
+          <button
+            onClick={() => logout()}
+            className="mt-2 inline-flex h-9 items-center rounded border border-border bg-surface px-3 text-[13px] hover:bg-background"
+          >
+            Sair
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (state.status === "invalid-role") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-6 text-center text-foreground">
@@ -147,6 +214,7 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
           <button
             onClick={() => {
               appsCache = null;
+              roleCache = null;
               setState({ status: "idle" });
             }}
             className="mt-2 inline-flex h-9 items-center rounded border border-border bg-surface px-3 text-[13px] hover:bg-background"
@@ -158,5 +226,5 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return <NfRoleProvider role={state.role}>{children}</NfRoleProvider>;
 }
