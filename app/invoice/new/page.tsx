@@ -236,6 +236,7 @@ function NewInvoiceForm() {
               value={dueDate}
               onChange={(e) => handleDueDateChange(e.target.value)}
               className={inputCls}
+              style={{ colorScheme: "dark" }}
             />
             {warnDate && <p className="mt-1 text-xs text-amber-400">{warnDate}</p>}
           </div>
@@ -251,6 +252,7 @@ function NewInvoiceForm() {
               value={refMonth}
               onChange={(e) => setRefMonth(e.target.value)}
               className={inputCls}
+              style={{ colorScheme: "dark" }}
             />
           </div>
           <div>

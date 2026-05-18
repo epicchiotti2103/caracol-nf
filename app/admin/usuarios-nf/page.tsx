@@ -46,8 +46,9 @@ function UsuariosNfContent() {
     setLoading(true);
     setError("");
     try {
-      const res: NfUser[] = await apiFetch("/nf/users");
-      setUsers(Array.isArray(res) ? res : []);
+      const res: { items: NfUser[]; total: number } | NfUser[] = await apiFetch("/nf/users");
+      const items = Array.isArray(res) ? res : res?.items || [];
+      setUsers(items);
     } catch (err: any) {
       setError(err?.message || "Falha ao carregar usuarios.");
     } finally {
