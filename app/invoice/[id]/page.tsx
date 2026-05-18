@@ -39,7 +39,13 @@ function InvoiceDetail({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [pendingAction, setPendingAction] = useState<Action | null>(null);
   const [rejectNotes, setRejectNotes] = useState("");
+  const [rejectInternalNotes, setRejectInternalNotes] = useState("");
   const [acting, setActing] = useState(false);
+
+  // Painel de notas (admin/adm_campanha podem editar; publisher so ve notes_supplier read-only)
+  const [notesSupplier, setNotesSupplier] = useState("");
+  const [notesInternal, setNotesInternal] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
 
   const t = {
     back: lang === "pt" ? "Voltar" : "Back",
@@ -73,7 +79,21 @@ function InvoiceDetail({ id }: { id: string }) {
       lang === "pt" ? "Informe o motivo da recusa." : "Enter the rejection reason.",
     approvedOk: lang === "pt" ? "NF aprovada" : "Invoice approved",
     rejectedOk: lang === "pt" ? "NF recusada" : "Invoice rejected",
-    paidOk: lang === "pt" ? "NF marcada como paga" : "Invoice marked as paid"
+    paidOk: lang === "pt" ? "NF marcada como paga" : "Invoice marked as paid",
+    // Painel de notas
+    notesSupplierLabel:
+      lang === "pt" ? "Notas para o fornecedor" : "Notes from Caracol",
+    notesInternalLabel: "Notas internas — nao visiveis ao fornecedor",
+    saveNotes: "Salvar notas",
+    notesSavedOk: "Notas salvas",
+    notesSaveFail: "Falha ao salvar notas",
+    noNotesYet: lang === "pt" ? "Sem notas." : "No notes.",
+    // Modal de recusa
+    rejectReasonSupplier:
+      lang === "pt"
+        ? "Motivo (visivel ao fornecedor)"
+        : "Reason (visible to supplier)",
+    rejectInternalNote: "Anotacao interna (opcional)"
   };
 
   const load = async () => {
@@ -82,10 +102,37 @@ function InvoiceDetail({ id }: { id: string }) {
     try {
       const inv: Invoice = await apiFetch(`/nf/invoices/${id}`);
       setInvoice(inv);
+      setNotesSupplier(inv.notes_supplier || "");
+      setNotesInternal(inv.notes_internal || "");
     } catch (err: any) {
       setError(err?.message || t.notFound);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveNotes = async () => {
+    if (!invoice) return;
+    setSavingNotes(true);
+    try {
+      const body: Record<string, any> = {
+        notes_supplier: notesSupplier.trim() || null
+      };
+      if (role === "admin" || role === "adm_campanha") {
+        body.notes_internal = notesInternal.trim() || null;
+      }
+      const updated: Invoice = await apiFetch(`/nf/invoices/${id}/notes`, {
+        method: "PATCH",
+        body: JSON.stringify(body)
+      });
+      setInvoice(updated);
+      setNotesSupplier(updated.notes_supplier || "");
+      setNotesInternal(updated.notes_internal || "");
+      toast.success(t.notesSavedOk);
+    } catch (err: any) {
+      toast.error(err?.message || t.notesSaveFail);
+    } finally {
+      setSavingNotes(false);
     }
   };
 
@@ -117,7 +164,10 @@ function InvoiceDetail({ id }: { id: string }) {
         toast.error(t.reasonRequired);
         return;
       }
-      body.notes = rejectNotes.trim();
+      body.notes_supplier = rejectNotes.trim();
+      if (rejectInternalNotes.trim()) {
+        body.notes_internal = rejectInternalNotes.trim();
+      }
     }
     body.status = newStatus;
     setActing(true);
@@ -136,6 +186,10 @@ function InvoiceDetail({ id }: { id: string }) {
       );
       setPendingAction(null);
       setRejectNotes("");
+      setRejectInternalNotes("");
+      // Apos PATCH /status, ressincronizar notas locais
+      setNotesSupplier(updated.notes_supplier || "");
+      setNotesInternal(updated.notes_internal || "");
     } catch (err: any) {
       toast.error(err?.message || (lang === "pt" ? "Falha." : "Failed."));
     } finally {
@@ -257,16 +311,30 @@ function InvoiceDetail({ id }: { id: string }) {
           </div>
         )}
 
-        {/* Motivo de recusa */}
-        {invoice.status === "recusada" && invoice.notes && (
+        {/* Motivo de recusa (mostra notes_supplier em destaque vermelho) */}
+        {invoice.status === "recusada" && invoice.notes_supplier && (
           <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
             <p className="mb-0.5 text-xs font-semibold uppercase tracking-wider text-red-300">
               {t.rejectedNotes}
             </p>
-            <p className="text-sm text-red-100/80">{invoice.notes}</p>
+            <p className="text-sm text-red-100/80">{invoice.notes_supplier}</p>
           </div>
         )}
       </div>
+
+      {/* Paineis de notas */}
+      <NotesPanels
+        role={role}
+        lang={lang}
+        invoice={invoice}
+        notesSupplier={notesSupplier}
+        notesInternal={notesInternal}
+        setNotesSupplier={setNotesSupplier}
+        setNotesInternal={setNotesInternal}
+        onSave={saveNotes}
+        saving={savingNotes}
+        t={t}
+      />
 
       {/* Acoes */}
       {(canApprove || canReject || canPay) && (
@@ -305,14 +373,110 @@ function InvoiceDetail({ id }: { id: string }) {
           t={t}
           rejectNotes={rejectNotes}
           setRejectNotes={setRejectNotes}
+          rejectInternalNotes={rejectInternalNotes}
+          setRejectInternalNotes={setRejectInternalNotes}
           loading={acting}
           onCancel={() => {
             setPendingAction(null);
             setRejectNotes("");
+            setRejectInternalNotes("");
           }}
           onConfirm={executeAction}
         />
       )}
+    </div>
+  );
+}
+
+function NotesPanels({
+  role,
+  lang,
+  invoice,
+  notesSupplier,
+  notesInternal,
+  setNotesSupplier,
+  setNotesInternal,
+  onSave,
+  saving,
+  t
+}: {
+  role: string;
+  lang: "pt" | "en";
+  invoice: Invoice;
+  notesSupplier: string;
+  notesInternal: string;
+  setNotesSupplier: (v: string) => void;
+  setNotesInternal: (v: string) => void;
+  onSave: () => void;
+  saving: boolean;
+  t: any;
+}) {
+  const canEdit = role === "admin" || role === "adm_campanha";
+
+  // Publisher so ve notes_supplier (read-only). Se vazio, esconde painel.
+  if (!canEdit) {
+    if (!invoice.notes_supplier) return null;
+    return (
+      <div className="mt-6 rounded-xl border border-border bg-surface p-6">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted">
+          {t.notesSupplierLabel}
+        </p>
+        <p className="whitespace-pre-wrap text-sm text-foreground">
+          {invoice.notes_supplier}
+        </p>
+      </div>
+    );
+  }
+
+  // Admin / adm_campanha: 2 paineis editaveis
+  const dirty =
+    (notesSupplier || "") !== (invoice.notes_supplier || "") ||
+    (notesInternal || "") !== (invoice.notes_internal || "");
+
+  return (
+    <div className="mt-6 space-y-4">
+      <div className="rounded-xl border border-border bg-surface p-6">
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-muted">
+          {t.notesSupplierLabel}
+        </label>
+        <textarea
+          value={notesSupplier}
+          onChange={(e) => setNotesSupplier(e.target.value)}
+          rows={3}
+          placeholder={lang === "pt" ? "Visivel ao fornecedor" : ""}
+          className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
+        />
+      </div>
+
+      <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6">
+        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-amber-300">
+          {t.notesInternalLabel}
+        </label>
+        <textarea
+          value={notesInternal}
+          onChange={(e) => setNotesInternal(e.target.value)}
+          rows={3}
+          placeholder="So admin / adm_campanha veem"
+          className="w-full rounded-lg border border-amber-500/30 bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-amber-400/70"
+        />
+      </div>
+
+      <div className="flex justify-end">
+        <button
+          onClick={onSave}
+          disabled={saving || !dirty}
+          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {saving ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {t.saving}
+            </>
+          ) : (
+            t.saveNotes
+          )}
+        </button>
+      </div>
     </div>
   );
 }
@@ -333,6 +497,8 @@ function ActionModal({
   t,
   rejectNotes,
   setRejectNotes,
+  rejectInternalNotes,
+  setRejectInternalNotes,
   loading,
   onCancel,
   onConfirm
@@ -341,6 +507,8 @@ function ActionModal({
   t: any;
   rejectNotes: string;
   setRejectNotes: (v: string) => void;
+  rejectInternalNotes: string;
+  setRejectInternalNotes: (v: string) => void;
   loading: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -364,17 +532,31 @@ function ActionModal({
         </div>
         <div className="space-y-4 p-6">
           {action === "reject" && (
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                {t.rejectionReason} <span className="text-primary">*</span>
-              </label>
-              <textarea
-                value={rejectNotes}
-                onChange={(e) => setRejectNotes(e.target.value)}
-                rows={3}
-                className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
-              />
-            </div>
+            <>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">
+                  {t.rejectReasonSupplier} <span className="text-primary">*</span>
+                </label>
+                <textarea
+                  value={rejectNotes}
+                  onChange={(e) => setRejectNotes(e.target.value)}
+                  rows={3}
+                  className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-amber-300">
+                  {t.rejectInternalNote}
+                </label>
+                <textarea
+                  value={rejectInternalNotes}
+                  onChange={(e) => setRejectInternalNotes(e.target.value)}
+                  rows={2}
+                  placeholder="So admin / adm_campanha veem"
+                  className="w-full rounded-lg border border-amber-500/30 bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-amber-400/70"
+                />
+              </div>
+            </>
           )}
           <div className="flex gap-3 pt-2">
             <button

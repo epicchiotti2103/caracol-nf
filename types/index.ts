@@ -15,7 +15,8 @@ export interface Invoice {
   campaign: string;
   status: InvoiceStatus;
   pdf_path?: string | null;
-  notes?: string | null;
+  notes_supplier?: string | null;
+  notes_internal?: string | null;
   publisher_id: string;
   publisher_name?: string | null;
   publisher_email?: string | null;

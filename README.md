@@ -46,7 +46,9 @@ em_analise --(approve)--> aprovada --(pay)--> paga
 ```
 \* adm_campanha/admin podem recusar uma `aprovada` se necessario.
 
-Campos de auditoria: `approved_by` + `approved_at` (quem aprovou); `paid_by` + `paid_at` (quem pagou); `notes` carrega o motivo da recusa.
+Campos de auditoria: `approved_by` + `approved_at` (quem aprovou); `paid_by` + `paid_at` (quem pagou).
+
+Notas em 2 campos: `notes_supplier` (visivel a todos, mostrada ao publisher — carrega motivo de recusa quando aplicavel) e `notes_internal` (so admin/adm_campanha veem; backend mascara como `null` no payload do publisher). Editaveis a qualquer hora via `PATCH /nf/invoices/{id}/notes`.
 
 ## Controle de acesso
 

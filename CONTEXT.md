@@ -74,7 +74,8 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `GET /nf/invoices/{id}` — detalhe
 - `GET /nf/invoices/{id}/pdf` — `{url}` assinada (5min)
 - `POST /nf/invoices` — cria (multipart, campo `pdf` opcional)
-- `PATCH /nf/invoices/{id}/status` — `{status, notes?}`; regras de papel no backend
+- `PATCH /nf/invoices/{id}/status` — `{status, notes_supplier?, notes_internal?}`; regras de papel no backend
+- `PATCH /nf/invoices/{id}/notes` — `{notes_supplier?, notes_internal?}` (admin OU adm_campanha) — edita notas sem mudar status
 - `GET /nf/dashboard/summary` — `{em_analise_count, a_pagar_amount, pagas_30d_amount}` (admin)
 - `GET /nf/users` — lista users com `nf_role` (admin)
 - `PUT /nf/users/{user_id}/role` — `{role: NfRole | null}` (admin)
@@ -97,12 +98,15 @@ Admin tambem pode gerir papeis em `/admin/usuarios-nf` via `PUT /nf/users/{id}/r
         +--(reject + notes)-> recusada <-(reject + notes, edge)
 ```
 
-Modal de aprovacao/pagamento so confirma. Modal de recusa exige `notes` (motivo).
+Modal de aprovacao/pagamento so confirma. Modal de recusa exige `notes_supplier` (motivo visivel ao fornecedor) e aceita opcionalmente `notes_internal` (anotacao interna).
 
 Campos de auditoria persistidos pelo backend:
 - `approved_by` (uuid) + `approved_at` (timestamp) — preenchidos no transition para `aprovada`
 - `paid_by` + `paid_at` — preenchidos no transition para `paga`
-- `notes` — texto livre, carrega motivo da recusa
+- `notes_supplier` — texto livre visivel a todos os papeis (incluindo publisher). Carrega o motivo da recusa quando o status fica `recusada`.
+- `notes_internal` — texto livre visivel SO a admin/adm_campanha. Backend mascara como `null` quando publisher consome o endpoint. Usado pra comentarios internos da equipe.
+
+Ambos os campos de notas podem ser editados a qualquer hora (independente do status) via `PATCH /nf/invoices/{id}/notes` por admin/adm_campanha. O detalhe da NF mostra paineis editaveis pra esses papeis; publisher so ve `notes_supplier` em modo read-only (e so se ela tiver conteudo).
 
 O frontend exibe nome do user (`approved_by_name`, `paid_by_name`) se o backend retornar; senao mostra o UUID.
 
@@ -157,7 +161,8 @@ NEXT_PUBLIC_HUB_URL=https://app.aeobr.com.br
 - [x] Form de cadastro com upload PDF
 - [x] Detalhe com acoes condicionais por papel
 - [x] Workflow de status (em_analise → aprovada → paga, recusada)
-- [x] Auditoria (approved_by, approved_at, paid_by, paid_at, notes)
+- [x] Auditoria (approved_by, approved_at, paid_by, paid_at)
+- [x] Notas separadas: `notes_supplier` (visivel ao publisher) + `notes_internal` (so admin/adm_campanha) com endpoint `PATCH /nf/invoices/{id}/notes`
 - [x] Dashboard admin (em_analise_count, a_pagar_amount, pagas_30d_amount)
 - [x] Gestao de papeis intra-NF (`/admin/usuarios-nf`)
 - [x] Logo Caracol clicavel volta pro Hub
