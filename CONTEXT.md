@@ -73,7 +73,7 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `GET /nf/invoices` — lista (filtrada por papel no backend)
 - `GET /nf/invoices/{id}` — detalhe
 - `GET /nf/invoices/{id}/pdf` — `{url}` assinada (5min)
-- `POST /nf/invoices` — cria (multipart, campo `pdf` opcional)
+- `POST /nf/invoices` — cria (multipart, campo `pdf` opcional). Admin/adm_campanha **devem** enviar `publisher_id` (o parceiro em nome de quem a NF esta sendo cadastrada); publisher cadastrando pra si nao precisa.
 - `PATCH /nf/invoices/{id}/status` — `{status, notes_supplier?, notes_internal?}`; regras de papel no backend
 - `PATCH /nf/invoices/{id}/notes` — `{notes_supplier?, notes_internal?}` (admin OU adm_campanha) — edita notas sem mudar status
 - `PATCH /nf/invoices/{id}/assignee` — `{assignee_id: string | null}` (admin OU adm_campanha) — define quem revisa a NF. `POST /invoices` ja faz auto-assign (random adm_campanha → fallback admin → null)
@@ -112,6 +112,8 @@ Ambos os campos de notas podem ser editados a qualquer hora (independente do sta
 Cada NF tambem tem `assignee_id` / `assignee_name` (responsavel pela revisao). `POST /invoices` faz auto-assign sorteando um adm_campanha; se nao houver, cai pra admin; se nenhum existir, fica null. Admin/adm_campanha podem reatribuir a qualquer momento via `PATCH /nf/invoices/{id}/assignee` no detalhe.
 
 O frontend exibe `publisher_name`, `approved_by_name`, `paid_by_name` e `assignee_name` populados pelo backend. UUIDs nao aparecem mais na UI — fallback e "—".
+
+Backend tambem separa **publisher** (parceiro/fornecedor — `publisher_id`/`publisher_name`/`publisher_email`) de **submitted_by** (quem cadastrou de fato — `submitted_by`/`submitted_by_name`). Quando admin/adm_campanha cadastra NF em nome de um publisher, o form `/invoice/new` exige `<select>` obrigatorio com a lista de publishers e envia `publisher_id` no FormData; publisher cadastrando pra si nao precisa (backend usa o proprio user). No detalhe, abaixo da linha do publisher, aparece uma linha discreta "Cadastrado por: X" / "Submitted by: X" apenas quando `submitted_by !== publisher_id`.
 
 ## Bilinguismo
 
@@ -167,6 +169,7 @@ NEXT_PUBLIC_HUB_URL=https://app.aeobr.com.br
 - [x] Auditoria (approved_by, approved_at, paid_by, paid_at)
 - [x] Notas separadas: `notes_supplier` (visivel ao publisher) + `notes_internal` (so admin/adm_campanha) com endpoint `PATCH /nf/invoices/{id}/notes`
 - [x] Campo `assignee_id` (responsavel) + auto-assign no POST + reatribuicao via `PATCH /nf/invoices/{id}/assignee` + banner "N NFs aguardando voce" no topo da lista (consumindo `pending_assigned_count` do `GET /nf/me/role`)
+- [x] Separacao `publisher` (parceiro) vs `submitted_by` (quem cadastrou): admin/adm_campanha tem `<select>` obrigatorio de publisher no `/invoice/new` (envia `publisher_id` no FormData) e o detalhe mostra "Cadastrado por: X" quando os dois diferem
 - [x] Dashboard admin (em_analise_count, a_pagar_amount, pagas_30d_amount)
 - [x] Gestao de papeis intra-NF (`/admin/usuarios-nf`)
 - [x] Logo Caracol clicavel volta pro Hub

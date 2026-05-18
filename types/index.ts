@@ -20,6 +20,8 @@ export interface Invoice {
   publisher_id: string;
   publisher_name?: string | null;
   publisher_email?: string | null;
+  submitted_by?: string | null;
+  submitted_by_name?: string | null;
   assignee_id?: string | null;
   assignee_name?: string | null;
   approved_by?: string | null;

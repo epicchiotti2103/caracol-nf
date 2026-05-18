@@ -19,7 +19,7 @@ CRUD de invoices funcionando, com upload de PDF, papeis intra-NF (publisher / ad
 
 - `/login` — login conectado ao Supabase Auth (via API do Tracker)
 - `/` — lista de notas fiscais (renderizacao diferente por papel; titulo, colunas e botoes adaptam)
-- `/invoice/new` — formulario de cadastro de NF com upload de PDF (form bilingual: ingles pra publisher, portugues pros outros)
+- `/invoice/new` — formulario de cadastro de NF com upload de PDF (form bilingual: ingles pra publisher, portugues pros outros). Admin/adm_campanha precisam selecionar o publisher num `<select>` obrigatorio (alimentado por `GET /nf/users` filtrado por `nf_role === "publisher"`); publisher cadastra direto pra si.
 - `/invoice/[id]` — detalhe da NF com auditoria (quem aprovou / quem pagou + timestamps) e acoes condicionais conforme papel
 - `/admin/usuarios-nf` — gestao de papeis intra-NF (apenas admin)
 
@@ -55,6 +55,10 @@ Notas em 2 campos: `notes_supplier` (visivel a todos, mostrada ao publisher — 
 Cada NF tem um campo opcional `assignee_id` (preenchido automaticamente no `POST /invoices` por um adm_campanha aleatorio, com fallback pra admin). Quem esta listado como responsavel ve, no topo da lista, um banner laranja "Voce tem N NFs aguardando voce" enquanto houver NFs `em_analise` atribuidas a ele. Clicar no banner ativa um filtro local ("mine") que mostra so essas. So admin/adm_campanha veem o banner — publisher recebe `pending_assigned_count = 0` do backend.
 
 No detalhe da NF, admin/adm_campanha veem o nome do responsavel e podem reatribuir via `PATCH /nf/invoices/{id}/assignee` (modal com `<select>` listando admins + adms de campanha; opcao "sem responsavel" zera). Publisher so ve o nome em modo read-only, traduzido como "Reviewer".
+
+## Cadastro em nome do publisher
+
+Admin/adm_campanha podem criar uma NF em nome de outro publisher: o form `/invoice/new` exige a selecao do publisher num `<select>` no topo (lista vem de `GET /nf/users` filtrada por `nf_role === "publisher"`) e envia `publisher_id` no FormData do `POST /nf/invoices`. Se nao houver publisher cadastrado, o form mostra um warning com link pra `/admin/usuarios-nf` e desabilita o submit. O detalhe da NF distingue **publisher** (parceiro/fornecedor, `publisher_id`/`publisher_name`) de **submitted_by** (quem cadastrou), exibindo a linha discreta "Cadastrado por: X" / "Submitted by: X" abaixo do publisher apenas quando `submitted_by !== publisher_id`.
 
 ## Controle de acesso
 

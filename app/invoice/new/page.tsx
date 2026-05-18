@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -14,6 +15,7 @@ import { AppShell } from "@/components/app-shell";
 import { useNfRole, langForRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
+import type { NfUser } from "@/types";
 
 const MAX_PDF_MB = 10;
 
@@ -31,17 +33,50 @@ function NewInvoiceForm() {
   const router = useRouter();
   const toast = useToast();
 
+  // Admin/adm_campanha precisam escolher um publisher pra cadastrar em nome dele.
+  const needsPublisherSelect = role === "admin" || role === "adm_campanha";
+
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [amount, setAmount] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [refMonth, setRefMonth] = useState(""); // YYYY-MM
   const [campaign, setCampaign] = useState("");
   const [pdf, setPdf] = useState<File | null>(null);
+  const [publisherId, setPublisherId] = useState("");
+
+  // Carregamento da lista de publishers (so quando admin/adm_campanha)
+  const [publishers, setPublishers] = useState<NfUser[]>([]);
+  const [loadingPublishers, setLoadingPublishers] = useState(false);
+  const [publishersError, setPublishersError] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [warnDate, setWarnDate] = useState("");
+
+  useEffect(() => {
+    if (!needsPublisherSelect) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingPublishers(true);
+      setPublishersError("");
+      try {
+        const res: { items: NfUser[]; total: number } | NfUser[] =
+          await apiFetch("/nf/users");
+        const items = Array.isArray(res) ? res : res?.items || [];
+        if (cancelled) return;
+        setPublishers(items.filter((u) => u.nf_role === "publisher"));
+      } catch (err: any) {
+        if (cancelled) return;
+        setPublishersError(err?.message || "Falha ao carregar publishers.");
+      } finally {
+        if (!cancelled) setLoadingPublishers(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [needsPublisherSelect]);
 
   const labels = {
     title: lang === "pt" ? "Nova nota fiscal" : "New invoice",
@@ -69,6 +104,13 @@ function NewInvoiceForm() {
       lang === "pt"
         ? `Arquivo muito grande (max ${MAX_PDF_MB}MB).`
         : `File too large (max ${MAX_PDF_MB}MB).`,
+    publisherLabel: "Publisher",
+    publisherPlaceholder: "Selecione um publisher",
+    publisherLoading: "Carregando publishers...",
+    publisherRequired: "Selecione um publisher.",
+    noPublishers:
+      "Nenhum publisher cadastrado ainda. Cadastre um publisher em /admin/usuarios-nf antes de criar uma NF.",
+    goToUsuariosNf: "Ir para /admin/usuarios-nf",
     successTitle: lang === "pt" ? "NF enviada!" : "Invoice sent!",
     successSub:
       lang === "pt"
@@ -85,6 +127,7 @@ function NewInvoiceForm() {
   };
 
   const validate = () => {
+    if (needsPublisherSelect && !publisherId) return labels.publisherRequired;
     if (!invoiceNumber.trim()) return labels.invoiceNumber + " — " + labels.required;
     const amt = parseFloat(amount.replace(",", "."));
     if (isNaN(amt) || amt <= 0) return labels.amountGt0;
@@ -125,6 +168,9 @@ function NewInvoiceForm() {
       const refIso = refMonth.length === 7 ? `${refMonth}-01` : refMonth;
       fd.append("reference_month", refIso);
       fd.append("campaign", campaign.trim());
+      if (needsPublisherSelect && publisherId) {
+        fd.append("publisher_id", publisherId);
+      }
       if (pdf) fd.append("pdf", pdf);
 
       await apiFetch("/nf/invoices", { method: "POST", body: fd });
@@ -155,6 +201,7 @@ function NewInvoiceForm() {
               setRefMonth("");
               setCampaign("");
               setPdf(null);
+              setPublisherId("");
             }}
             className="rounded-lg border border-border px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-surface"
           >
@@ -196,7 +243,55 @@ function NewInvoiceForm() {
         </div>
       )}
 
+      {needsPublisherSelect &&
+        !loadingPublishers &&
+        publishers.length === 0 &&
+        !publishersError && (
+          <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-300" />
+              <div className="flex-1">
+                <p className="text-sm text-amber-100">{labels.noPublishers}</p>
+                <Link
+                  href="/admin/usuarios-nf"
+                  className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
+                >
+                  {labels.goToUsuariosNf}
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
       <form onSubmit={onSubmit} className="space-y-5 rounded-xl border border-border bg-surface p-6">
+        {needsPublisherSelect && (
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-foreground">
+              {labels.publisherLabel} <span className="text-primary">*</span>
+            </label>
+            <select
+              value={publisherId}
+              onChange={(e) => setPublisherId(e.target.value)}
+              disabled={loadingPublishers || publishers.length === 0}
+              className={inputCls + " disabled:opacity-60"}
+            >
+              <option value="">
+                {loadingPublishers
+                  ? labels.publisherLoading
+                  : labels.publisherPlaceholder}
+              </option>
+              {publishers.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name ? `${u.name} (${u.email})` : u.email}
+                </option>
+              ))}
+            </select>
+            {publishersError && (
+              <p className="mt-1 text-xs text-danger">{publishersError}</p>
+            )}
+          </div>
+        )}
+
         <div>
           <label className="mb-1.5 block text-sm font-medium text-foreground">
             {labels.invoiceNumber} <span className="text-primary">*</span>
@@ -319,7 +414,10 @@ function NewInvoiceForm() {
           </button>
           <button
             type="submit"
-            disabled={submitting}
+            disabled={
+              submitting ||
+              (needsPublisherSelect && publishers.length === 0)
+            }
             className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-60"
           >
             {submitting ? (

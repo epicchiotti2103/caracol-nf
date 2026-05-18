@@ -63,6 +63,7 @@ function InvoiceDetail({ id }: { id: string }) {
     refMonth: lang === "pt" ? "Mes de referencia" : "Reference month",
     campaign: lang === "pt" ? "Campanha" : "Campaign",
     publisher: "Publisher",
+    submittedBy: lang === "pt" ? "Cadastrado por" : "Submitted by",
     status: "Status",
     createdAt: lang === "pt" ? "Enviada em" : "Sent at",
     downloadPdf: lang === "pt" ? "Baixar PDF" : "Download PDF",
@@ -334,6 +335,15 @@ function InvoiceDetail({ id }: { id: string }) {
             }
           />
         )}
+        {invoice.submitted_by &&
+          invoice.submitted_by !== invoice.publisher_id && (
+            <p className="text-xs text-muted">
+              {t.submittedBy}:{" "}
+              <span className="text-foreground/80">
+                {invoice.submitted_by_name || "—"}
+              </span>
+            </p>
+          )}
         <Row label={t.createdAt} value={fmtDateTime(invoice.created_at, lang)} />
 
         {invoice.pdf_path && (
