@@ -50,6 +50,10 @@ caracol-nf/
     app-shell.tsx                Layout com navbar
     nf-navbar.tsx                Navbar unificado, adapta conforme papel
     nf/bootstrap-gate.tsx        Valida acesso e expoe papel via context
+    nf/approval-badge.tsx        Badges 'N/2 aprovacoes' e 'Vencida ha N dias'
+    nf/dashboard-chips.tsx       Chips do topo do dashboard (pendentes/a pagar/vencidas) + hovercard
+    nf/hover-popover.tsx         Primitivo de hover/click popover (substitui Radix HoverCard)
+    nf/invoice-events.tsx        Timeline de eventos do detalhe
     status-badge.tsx             Badge bilingual de status
   lib/
     api.ts                       fetch helper com Bearer token
@@ -70,16 +74,22 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `POST /auth/refresh` — refresh do token (transparente via `lib/api.ts`)
 - `GET /hub/me/apps` — apps do user (gate de acesso)
 - `GET /nf/me/role` — `{role, pending_assigned_count}` — papel intra-NF + qtde de NFs `em_analise` atribuidas ao user (usado pelo banner "aguardando voce")
-- `GET /nf/invoices` — lista (filtrada por papel no backend)
-- `GET /nf/invoices/{id}` — detalhe
+- `GET /nf/invoices` — lista (filtrada por papel no backend). Cada item carrega campos derivados: `is_vencida`, `days_overdue`, `approvals_pending` (array de slots faltantes — `['adm_campanha']`, `['admin']`, `['adm_campanha','admin']` ou `[]`)
+- `GET /nf/invoices/{id}` — detalhe (inclui campos derivados acima + auditoria de aprovacoes duplas)
 - `GET /nf/invoices/{id}/pdf` — `{url}` assinada (5min)
-- `POST /nf/invoices` — cria (multipart, campo `pdf` opcional). Admin/adm_campanha **devem** enviar `publisher_id` (o parceiro em nome de quem a NF esta sendo cadastrada); publisher cadastrando pra si nao precisa.
-- `PATCH /nf/invoices/{id}/status` — `{status, notes_supplier?, notes_internal?}`; regras de papel no backend
+- `GET /nf/invoices/{id}/events` — timeline de auditoria. Itens `{event_type, from_value, to_value, actor: {id, name}, created_at}`. Tipos: `status_change`, `assignee_change`, `approval_added`, `paid_by_designated`, `notes_update`
+- `POST /nf/invoices` — cria (multipart, campo `pdf` opcional). Admin/adm_campanha **devem** enviar `publisher_id`; publisher cadastrando pra si nao precisa.
+- `POST /nf/invoices/{id}/approve` — body opcional `{paid_by_assignee_id}`. Backend detecta papel do caller (adm_campanha ou admin) e popula a coluna certa. Quando ambas aprovacoes existem, status vai pra `aprovada`. Se for admin completando a dupla, ele pode designar pagador via `paid_by_assignee_id`.
+- `POST /nf/invoices/{id}/reject` — body `{reason, notes_internal?}`. So funciona em `em_analise`. `reason` vai pra `notes_supplier`.
+- `POST /nf/invoices/{id}/pay` — admin only. Marca como `paga`.
 - `PATCH /nf/invoices/{id}/notes` — `{notes_supplier?, notes_internal?}` (admin OU adm_campanha) — edita notas sem mudar status
-- `PATCH /nf/invoices/{id}/assignee` — `{assignee_id: string | null}` (admin OU adm_campanha) — define quem revisa a NF. `POST /invoices` ja faz auto-assign (random adm_campanha → fallback admin → null)
-- `GET /nf/dashboard/summary` — `{em_analise_count, a_pagar_amount, pagas_30d_amount}` (admin)
+- `PATCH /nf/invoices/{id}/assignee` — `{assignee_id: string | null}` (admin OU adm_campanha) — grava evento na timeline
+- `GET /nf/dashboard/summary` — agregacoes. Alem dos baldes legados (`pending_review`, `to_pay`, `paid_last_30d`), traz `pending_approvals_count`, `to_pay_count`, `overdue_count` pros chips do topo
+- `GET /nf/dashboard/pending-approvals` | `/to-pay` | `/overdue` — listas curtas (ate 10 itens) com `{invoice_id, invoice_number, fornecedor, valor, aguarda?, pagador?, dias_atraso?}` pra preview do hovercard dos chips
 - `GET /nf/users` — lista users com `nf_role` (admin)
 - `PUT /nf/users/{user_id}/role` — `{role: NfRole | null}` (admin)
+
+**Deprecado**: `PATCH /nf/invoices/{id}/status` foi substituido pelos endpoints `/approve`, `/reject`, `/pay`. Frontend nao chama mais.
 
 ## Papeis intra-NF
 
@@ -91,21 +101,33 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 
 Admin tambem pode gerir papeis em `/admin/usuarios-nf` via `PUT /nf/users/{id}/role` (passar `role: null` remove o papel).
 
-## Workflow de status
+## Workflow de status (aprovacao dupla)
 
 ```
-   em_analise --(approve)--> aprovada --(pay)--> paga
-        |                         |
-        +--(reject + notes)-> recusada <-(reject + notes, edge)
+   em_analise --(approve x2: adm_campanha + admin)--> aprovada --(pay, admin)--> paga
+        |
+        +--(reject + reason)-> recusada
 ```
 
-Modal de aprovacao/pagamento so confirma. Modal de recusa exige `notes_supplier` (motivo visivel ao fornecedor) e aceita opcionalmente `notes_internal` (anotacao interna).
+Toda NF em `em_analise` precisa de DUAS aprovacoes pra virar `aprovada`: uma de `adm_campanha` e outra de `admin`. A ordem nao importa. Cada papel ve o botao "Aprovar (adm campanha)" / "Aprovar (admin)" enquanto o slot dele estiver vazio. Apos sua aprovacao, vira chip "Voce aprovou — aguardando ...". Quando admin completa a dupla, ele ve um modal de confirmacao com a opcao **"Designar pagador (opcional)"** — dropdown que lista admins. Se preenchido, NF fica designada pra aquele admin pagar (mas nao bloqueia: qualquer admin ainda pode pagar; e so um sinal de fluxo).
+
+Recusa: apenas em `em_analise` (nao tem mais recusa pos-aprovacao). Modal exige `reason` (vira `notes_supplier`) e aceita `notes_internal` opcional. Cancela o processo — a NF nao pode mais ser aprovada.
+
+Pagamento: apenas admin, apenas em `aprovada`. Botao "Marcar como paga" → confirma → backend marca `paid_at`, `paid_by`.
 
 Campos de auditoria persistidos pelo backend:
-- `approved_by` (uuid) + `approved_at` (timestamp) — preenchidos no transition para `aprovada`
-- `paid_by` + `paid_at` — preenchidos no transition para `paga`
-- `notes_supplier` — texto livre visivel a todos os papeis (incluindo publisher). Carrega o motivo da recusa quando o status fica `recusada`.
-- `notes_internal` — texto livre visivel SO a admin/adm_campanha. Backend mascara como `null` quando publisher consome o endpoint. Usado pra comentarios internos da equipe.
+- `approval_adm_campanha_by` + `approval_adm_campanha_at` — aprovacao do adm. campanha
+- `approval_admin_by` + `approval_admin_at` — aprovacao do admin
+- `paid_by_assignee_id` (+ `paid_by_assignee_name`) — admin designado pra pagar (opcional, definido pelo admin que completa a dupla)
+- `paid_by` + `paid_at` — quem efetivamente marcou como paga
+- `notes_supplier` — visivel a todos (carrega motivo da recusa)
+- `notes_internal` — so admin/adm_campanha (backend mascara pra publisher)
+- Campos legados `approved_by`/`approved_at` ainda existem pra compat, mas a UI consome os campos `approval_*` dupla.
+
+Campos derivados retornados em `GET /nf/invoices*`:
+- `is_vencida: bool` — `due_date < hoje` e status != paga
+- `days_overdue: number` — dias decorridos do vencimento (so se vencida)
+- `approvals_pending: ApprovalSlot[]` — quais aprovacoes faltam. `[]` = aprovada
 
 Ambos os campos de notas podem ser editados a qualquer hora (independente do status) via `PATCH /nf/invoices/{id}/notes` por admin/adm_campanha. O detalhe da NF mostra paineis editaveis pra esses papeis; publisher so ve `notes_supplier` em modo read-only (e so se ela tiver conteudo).
 
@@ -165,8 +187,12 @@ NEXT_PUBLIC_HUB_URL=https://app.aeobr.com.br
 - [x] Lista de invoices (filtros + status)
 - [x] Form de cadastro com upload PDF
 - [x] Detalhe com acoes condicionais por papel
-- [x] Workflow de status (em_analise → aprovada → paga, recusada)
-- [x] Auditoria (approved_by, approved_at, paid_by, paid_at)
+- [x] Workflow de status com **aprovacao dupla** (adm_campanha + admin) → aprovada → paga, recusada via `POST /reject` (em_analise only)
+- [x] Auditoria dupla (`approval_adm_campanha_by/at`, `approval_admin_by/at`, `paid_by/at`)
+- [x] Dashboard com **chips no topo** (pendentes / a pagar / vencidas) + hovercard com ate 5 itens
+- [x] Timeline de eventos no detalhe da NF (`GET /nf/invoices/{id}/events`)
+- [x] Badges `2/2 aprovacoes`, `Vencida ha N dias`, "Pagador designado" no detalhe
+- [x] Filtro "Vencidas" e deep-link `?status=&vencida=1` na lista
 - [x] Notas separadas: `notes_supplier` (visivel ao publisher) + `notes_internal` (so admin/adm_campanha) com endpoint `PATCH /nf/invoices/{id}/notes`
 - [x] Campo `assignee_id` (responsavel) + auto-assign no POST + reatribuicao via `PATCH /nf/invoices/{id}/assignee` + banner "N NFs aguardando voce" no topo da lista (consumindo `pending_assigned_count` do `GET /nf/me/role`)
 - [x] Separacao `publisher` (parceiro) vs `submitted_by` (quem cadastrou): admin/adm_campanha tem `<select>` obrigatorio de publisher no `/invoice/new` (envia `publisher_id` no FormData) e o detalhe mostra "Cadastrado por: X" quando os dois diferem

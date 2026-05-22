@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle,
@@ -9,17 +9,21 @@ import {
   Download,
   Loader2,
   User as UserIcon,
+  Wallet,
   X
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
+import { ApprovalBadge, OverdueBadge } from "@/components/nf/approval-badge";
+import { InvoiceEvents } from "@/components/nf/invoice-events";
+import { useAuth } from "@/lib/auth-context";
 import { useNfRole, langForRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
 import { fmtCurrency, fmtDate, fmtDateTime, fmtRefMonth } from "@/lib/i18n";
-import type { Invoice, InvoiceStatus, NfUser } from "@/types";
+import type { Invoice, NfUser } from "@/types";
 
-type Action = "approve" | "reject" | "pay";
+type Action = "approve_adm" | "approve_admin" | "reject" | "pay";
 
 export default function InvoiceDetailPage({ params }: { params: { id: string } }) {
   return (
@@ -34,6 +38,7 @@ function InvoiceDetail({ id }: { id: string }) {
   const lang = langForRole(role);
   const router = useRouter();
   const toast = useToast();
+  const { user } = useAuth();
 
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,16 +46,21 @@ function InvoiceDetail({ id }: { id: string }) {
   const [pendingAction, setPendingAction] = useState<Action | null>(null);
   const [rejectNotes, setRejectNotes] = useState("");
   const [rejectInternalNotes, setRejectInternalNotes] = useState("");
+  const [paidByAssigneeId, setPaidByAssigneeId] = useState<string>("");
   const [acting, setActing] = useState(false);
+  // Bump usado pra refrescar a timeline apos acoes
+  const [eventsRefreshKey, setEventsRefreshKey] = useState(0);
 
-  // Painel de notas (admin/adm_campanha podem editar; publisher so ve notes_supplier read-only)
+  // Painel de notas
   const [notesSupplier, setNotesSupplier] = useState("");
   const [notesInternal, setNotesInternal] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
 
-  // Reatribuicao de responsavel (admin/adm_campanha)
+  // Reatribuicao de responsavel
   const [assignOpen, setAssignOpen] = useState(false);
+  const [adminUsers, setAdminUsers] = useState<NfUser[]>([]);
   const [assignableUsers, setAssignableUsers] = useState<NfUser[]>([]);
+  const [usersLoaded, setUsersLoaded] = useState(false);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [selectedAssignee, setSelectedAssignee] = useState<string>("");
   const [savingAssignee, setSavingAssignee] = useState(false);
@@ -64,15 +74,24 @@ function InvoiceDetail({ id }: { id: string }) {
     campaign: lang === "pt" ? "Campanha" : "Campaign",
     publisher: "Publisher",
     submittedBy: lang === "pt" ? "Cadastrado por" : "Submitted by",
-    status: "Status",
     createdAt: lang === "pt" ? "Enviada em" : "Sent at",
     downloadPdf: lang === "pt" ? "Baixar PDF" : "Download PDF",
-    approve: lang === "pt" ? "Aprovar" : "Approve",
+    approveAdm: "Aprovar (adm campanha)",
+    approveAdmin: "Aprovar (admin)",
+    youApproved: "Voce aprovou — aguardando admin",
+    youApprovedAdmin: "Voce aprovou — aguardando adm. campanha",
     reject: lang === "pt" ? "Recusar" : "Reject",
     markPaid: lang === "pt" ? "Marcar como paga" : "Mark as paid",
     rejectionReason: lang === "pt" ? "Motivo da recusa" : "Rejection reason",
-    confirmApprove:
-      lang === "pt" ? "Confirmar aprovacao?" : "Confirm approval?",
+    confirmApproveSingle: "Confirmar aprovacao?",
+    confirmApproveDouble: "Aprovar NF",
+    completesFlow:
+      "Esta aprovacao completa o fluxo. NF passa para 'aprovada' e fica a pagar.",
+    designatePayer: "Designar pagador (opcional)",
+    designatePayerHint:
+      "Se deixar vazio, qualquer admin pode marcar como paga.",
+    designateNobody: "— qualquer admin —",
+    confirmApproval: "Confirmar aprovacao",
     confirmPay:
       lang === "pt" ? "Confirmar pagamento?" : "Confirm payment?",
     confirmReject:
@@ -80,30 +99,28 @@ function InvoiceDetail({ id }: { id: string }) {
     cancel: lang === "pt" ? "Cancelar" : "Cancel",
     confirm: lang === "pt" ? "Confirmar" : "Confirm",
     saving: lang === "pt" ? "Salvando..." : "Saving...",
-    approvedBy: lang === "pt" ? "Aprovada por" : "Approved by",
+    approvedAdmBy: "Aprovado (adm. campanha) por",
+    approvedAdminBy: "Aprovado (admin) por",
     paidBy: lang === "pt" ? "Paga por" : "Paid by",
+    designatedPayer: "Pagador designado",
     rejectedNotes: lang === "pt" ? "Motivo" : "Notes",
     notFound: lang === "pt" ? "NF nao encontrada." : "Invoice not found.",
     reasonRequired:
       lang === "pt" ? "Informe o motivo da recusa." : "Enter the rejection reason.",
-    approvedOk: lang === "pt" ? "NF aprovada" : "Invoice approved",
+    approvedOk: lang === "pt" ? "Aprovacao registrada" : "Approval recorded",
     rejectedOk: lang === "pt" ? "NF recusada" : "Invoice rejected",
     paidOk: lang === "pt" ? "NF marcada como paga" : "Invoice marked as paid",
-    // Painel de notas
     notesSupplierLabel:
       lang === "pt" ? "Notas para o fornecedor" : "Notes from Caracol",
     notesInternalLabel: "Notas internas — nao visiveis ao fornecedor",
     saveNotes: "Salvar notas",
     notesSavedOk: "Notas salvas",
     notesSaveFail: "Falha ao salvar notas",
-    noNotesYet: lang === "pt" ? "Sem notas." : "No notes.",
-    // Modal de recusa
     rejectReasonSupplier:
       lang === "pt"
         ? "Motivo (visivel ao fornecedor)"
         : "Reason (visible to supplier)",
     rejectInternalNote: "Anotacao interna (opcional)",
-    // Responsavel
     responsibleLabel: lang === "pt" ? "Responsavel" : "Reviewer",
     noAssignee: lang === "pt" ? "Sem responsavel" : "Unassigned",
     reassign: lang === "pt" ? "Reatribuir" : "Reassign",
@@ -113,8 +130,7 @@ function InvoiceDetail({ id }: { id: string }) {
     assignSave: lang === "pt" ? "Salvar" : "Save",
     assignedOk: lang === "pt" ? "Responsavel atualizado" : "Reviewer updated",
     assignedFail:
-      lang === "pt" ? "Falha ao atualizar responsavel" : "Failed to update reviewer",
-    loadingUsersLabel: lang === "pt" ? "Carregando..." : "Loading..."
+      lang === "pt" ? "Falha ao atualizar responsavel" : "Failed to update reviewer"
   };
 
   const load = async () => {
@@ -129,6 +145,69 @@ function InvoiceDetail({ id }: { id: string }) {
       setError(err?.message || t.notFound);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const refreshInvoice = async () => {
+    try {
+      const inv: Invoice = await apiFetch(`/nf/invoices/${id}`);
+      setInvoice(inv);
+      setNotesSupplier(inv.notes_supplier || "");
+      setNotesInternal(inv.notes_internal || "");
+    } catch {
+      // silencioso
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  const loadUsers = async () => {
+    if (usersLoaded || loadingUsers) return;
+    setLoadingUsers(true);
+    try {
+      const res: { items: NfUser[]; total: number } | NfUser[] =
+        await apiFetch("/nf/users");
+      const items = Array.isArray(res) ? res : res?.items || [];
+      setAssignableUsers(
+        items.filter((u) => u.nf_role === "admin" || u.nf_role === "adm_campanha")
+      );
+      setAdminUsers(items.filter((u) => u.nf_role === "admin"));
+      setUsersLoaded(true);
+    } catch (err: any) {
+      toast.error(err?.message || t.assignedFail);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  const openAssignModal = async () => {
+    setSelectedAssignee(invoice?.assignee_id || "");
+    setAssignOpen(true);
+    await loadUsers();
+  };
+
+  const saveAssignee = async () => {
+    if (!invoice) return;
+    setSavingAssignee(true);
+    try {
+      const updated: Invoice = await apiFetch(
+        `/nf/invoices/${id}/assignee`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ assignee_id: selectedAssignee || null })
+        }
+      );
+      setInvoice(updated);
+      toast.success(t.assignedOk);
+      setAssignOpen(false);
+      setEventsRefreshKey((k) => k + 1);
+    } catch (err: any) {
+      toast.error(err?.message || t.assignedFail);
+    } finally {
+      setSavingAssignee(false);
     }
   };
 
@@ -150,59 +229,11 @@ function InvoiceDetail({ id }: { id: string }) {
       setNotesSupplier(updated.notes_supplier || "");
       setNotesInternal(updated.notes_internal || "");
       toast.success(t.notesSavedOk);
+      setEventsRefreshKey((k) => k + 1);
     } catch (err: any) {
       toast.error(err?.message || t.notesSaveFail);
     } finally {
       setSavingNotes(false);
-    }
-  };
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id]);
-
-  const openAssignModal = async () => {
-    setSelectedAssignee(invoice?.assignee_id || "");
-    setAssignOpen(true);
-    if (assignableUsers.length === 0) {
-      setLoadingUsers(true);
-      try {
-        const res: { items: NfUser[]; total: number } | NfUser[] =
-          await apiFetch("/nf/users");
-        const items = Array.isArray(res) ? res : res?.items || [];
-        // Filtra so admin / adm_campanha (publishers nao revisam)
-        setAssignableUsers(
-          items.filter(
-            (u) => u.nf_role === "admin" || u.nf_role === "adm_campanha"
-          )
-        );
-      } catch (err: any) {
-        toast.error(err?.message || t.assignedFail);
-      } finally {
-        setLoadingUsers(false);
-      }
-    }
-  };
-
-  const saveAssignee = async () => {
-    if (!invoice) return;
-    setSavingAssignee(true);
-    try {
-      const updated: Invoice = await apiFetch(
-        `/nf/invoices/${id}/assignee`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ assignee_id: selectedAssignee || null })
-        }
-      );
-      setInvoice(updated);
-      toast.success(t.assignedOk);
-      setAssignOpen(false);
-    } catch (err: any) {
-      toast.error(err?.message || t.assignedFail);
-    } finally {
-      setSavingAssignee(false);
     }
   };
 
@@ -215,46 +246,97 @@ function InvoiceDetail({ id }: { id: string }) {
     }
   };
 
+  // Derivacoes
+  const admApproved = !!invoice?.approval_adm_campanha_at;
+  const adminApproved = !!invoice?.approval_admin_at;
+  const isEmAnalise = invoice?.status === "em_analise";
+  const isAprovada = invoice?.status === "aprovada";
+
+  // Quem ja aprovou (consulta papel do user atual)
+  const youApprovedAsAdm =
+    !!user?.id &&
+    invoice?.approval_adm_campanha_by &&
+    invoice.approval_adm_campanha_by === user.id;
+  const youApprovedAsAdmin =
+    !!user?.id &&
+    invoice?.approval_admin_by &&
+    invoice.approval_admin_by === user.id;
+
+  const canApproveAsAdm =
+    role === "adm_campanha" && isEmAnalise && !admApproved;
+  const canApproveAsAdmin =
+    role === "admin" && isEmAnalise && !adminApproved;
+  const canReject =
+    (role === "admin" || role === "adm_campanha") && isEmAnalise;
+  const canPay = role === "admin" && isAprovada;
+
+  // Admin completando a dupla = ele aprova quando adm_campanha ja aprovou.
+  const adminCompletingFlow =
+    role === "admin" && isEmAnalise && admApproved && !adminApproved;
+
+  // Pre-carrega admins ao abrir modal de aprovacao do admin (pra dropdown de pagador)
+  useEffect(() => {
+    if (pendingAction === "approve_admin" && adminCompletingFlow) {
+      loadUsers();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAction, adminCompletingFlow]);
+
   const executeAction = async () => {
     if (!invoice || !pendingAction) return;
-    let newStatus: InvoiceStatus;
-    let body: Record<string, any> = {};
-    if (pendingAction === "approve") {
-      newStatus = "aprovada";
-    } else if (pendingAction === "pay") {
-      newStatus = "paga";
-    } else {
-      newStatus = "recusada";
-      if (!rejectNotes.trim()) {
-        toast.error(t.reasonRequired);
-        return;
-      }
-      body.notes_supplier = rejectNotes.trim();
-      if (rejectInternalNotes.trim()) {
-        body.notes_internal = rejectInternalNotes.trim();
-      }
-    }
-    body.status = newStatus;
     setActing(true);
     try {
-      const updated: Invoice = await apiFetch(`/nf/invoices/${id}/status`, {
-        method: "PATCH",
-        body: JSON.stringify(body)
-      });
+      let updated: Invoice;
+      let successMsg: string;
+      if (pendingAction === "approve_adm" || pendingAction === "approve_admin") {
+        const body: Record<string, any> = {};
+        // So manda paid_by_assignee_id se for admin completando o fluxo
+        if (
+          pendingAction === "approve_admin" &&
+          adminCompletingFlow &&
+          paidByAssigneeId
+        ) {
+          body.paid_by_assignee_id = paidByAssigneeId;
+        }
+        updated = await apiFetch(`/nf/invoices/${id}/approve`, {
+          method: "POST",
+          body: JSON.stringify(body)
+        });
+        successMsg = t.approvedOk;
+      } else if (pendingAction === "pay") {
+        updated = await apiFetch(`/nf/invoices/${id}/pay`, {
+          method: "POST",
+          body: JSON.stringify({})
+        });
+        successMsg = t.paidOk;
+      } else {
+        // reject
+        if (!rejectNotes.trim()) {
+          toast.error(t.reasonRequired);
+          setActing(false);
+          return;
+        }
+        const body: Record<string, any> = { reason: rejectNotes.trim() };
+        if (rejectInternalNotes.trim()) {
+          body.notes_internal = rejectInternalNotes.trim();
+        }
+        updated = await apiFetch(`/nf/invoices/${id}/reject`, {
+          method: "POST",
+          body: JSON.stringify(body)
+        });
+        successMsg = t.rejectedOk;
+      }
       setInvoice(updated);
-      toast.success(
-        pendingAction === "approve"
-          ? t.approvedOk
-          : pendingAction === "pay"
-          ? t.paidOk
-          : t.rejectedOk
-      );
+      setNotesSupplier(updated.notes_supplier || "");
+      setNotesInternal(updated.notes_internal || "");
+      toast.success(successMsg);
       setPendingAction(null);
       setRejectNotes("");
       setRejectInternalNotes("");
-      // Apos PATCH /status, ressincronizar notas locais
-      setNotesSupplier(updated.notes_supplier || "");
-      setNotesInternal(updated.notes_internal || "");
+      setPaidByAssigneeId("");
+      setEventsRefreshKey((k) => k + 1);
+      // Ressincroniza pra pegar campos derivados possivelmente ausentes na resposta direta
+      refreshInvoice();
     } catch (err: any) {
       toast.error(err?.message || (lang === "pt" ? "Falha." : "Failed."));
     } finally {
@@ -285,13 +367,13 @@ function InvoiceDetail({ id }: { id: string }) {
     );
   }
 
-  // Acoes disponiveis por papel
-  const canApprove =
-    (role === "adm_campanha" || role === "admin") && invoice.status === "em_analise";
-  const canReject =
-    (role === "adm_campanha" || role === "admin") &&
-    (invoice.status === "em_analise" || invoice.status === "aprovada");
-  const canPay = role === "admin" && invoice.status === "aprovada";
+  const showAnyAction =
+    canApproveAsAdm ||
+    canApproveAsAdmin ||
+    canReject ||
+    canPay ||
+    youApprovedAsAdm ||
+    youApprovedAsAdmin;
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6 lg:px-8">
@@ -308,7 +390,15 @@ function InvoiceDetail({ id }: { id: string }) {
           <p className="text-xs font-semibold uppercase tracking-wider text-primary">{t.invoice}</p>
           <h1 className="text-2xl font-semibold text-foreground">{invoice.invoice_number}</h1>
         </div>
-        <StatusBadge status={invoice.status} lang={lang} />
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <StatusBadge status={invoice.status} lang={lang} />
+          {(invoice.status === "em_analise" ||
+            invoice.status === "aprovada" ||
+            invoice.status === "paga") && (
+            <ApprovalBadge invoice={invoice} />
+          )}
+          <OverdueBadge invoice={invoice} />
+        </div>
       </div>
 
       <AssigneeBlock
@@ -317,6 +407,39 @@ function InvoiceDetail({ id }: { id: string }) {
         t={t}
         onOpen={openAssignModal}
       />
+
+      {/* Acoes */}
+      {role !== "publisher" && showAnyAction && (
+        <ActionsBar
+          invoice={invoice}
+          role={role}
+          t={t}
+          canApproveAsAdm={!!canApproveAsAdm}
+          canApproveAsAdmin={!!canApproveAsAdmin}
+          canReject={!!canReject}
+          canPay={!!canPay}
+          youApprovedAsAdm={!!youApprovedAsAdm}
+          youApprovedAsAdmin={!!youApprovedAsAdmin}
+          onApproveAdm={() => setPendingAction("approve_adm")}
+          onApproveAdmin={() => setPendingAction("approve_admin")}
+          onReject={() => setPendingAction("reject")}
+          onPay={() => setPendingAction("pay")}
+        />
+      )}
+
+      {/* Pagador designado */}
+      {(invoice.paid_by_assignee_id || invoice.paid_by_assignee_name) &&
+        invoice.status !== "paga" && (
+          <div className="mb-6 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+            <Wallet className="h-4 w-4 text-primary" />
+            <p className="text-sm text-muted">
+              {t.designatedPayer}:{" "}
+              <span className="font-medium text-foreground">
+                {invoice.paid_by_assignee_name || "—"}
+              </span>
+            </p>
+          </div>
+        )}
 
       <div className="space-y-4 rounded-xl border border-border bg-surface p-6">
         <Row label={t.amount} value={fmtCurrency(invoice.amount || 0, lang)} bold />
@@ -359,40 +482,44 @@ function InvoiceDetail({ id }: { id: string }) {
         )}
 
         {/* Auditoria de aprovacao/pagamento */}
-        {(invoice.approved_by || invoice.paid_by) && (
+        {(invoice.approval_adm_campanha_at ||
+          invoice.approval_admin_at ||
+          invoice.paid_at) && (
           <div className="space-y-2 border-t border-border pt-4">
-            {invoice.approved_by && (
-              <div className="flex items-start gap-2 text-sm">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" />
-                <p className="text-muted">
-                  {t.approvedBy}:{" "}
-                  <span className="font-medium text-foreground">
-                    {invoice.approved_by_name || "—"}
-                  </span>{" "}
-                  {invoice.approved_at && (
-                    <span className="text-xs">— {fmtDateTime(invoice.approved_at, lang)}</span>
-                  )}
-                </p>
-              </div>
+            {invoice.approval_adm_campanha_at && (
+              <ApprovalLine
+                icon={CheckCircle2}
+                label={t.approvedAdmBy}
+                name={
+                  invoice.approval_adm_campanha_by_name || "—"
+                }
+                at={invoice.approval_adm_campanha_at}
+                lang={lang}
+              />
             )}
-            {invoice.paid_by && (
-              <div className="flex items-start gap-2 text-sm">
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-300" />
-                <p className="text-muted">
-                  {t.paidBy}:{" "}
-                  <span className="font-medium text-foreground">
-                    {invoice.paid_by_name || "—"}
-                  </span>{" "}
-                  {invoice.paid_at && (
-                    <span className="text-xs">— {fmtDateTime(invoice.paid_at, lang)}</span>
-                  )}
-                </p>
-              </div>
+            {invoice.approval_admin_at && (
+              <ApprovalLine
+                icon={CheckCircle2}
+                label={t.approvedAdminBy}
+                name={invoice.approval_admin_by_name || "—"}
+                at={invoice.approval_admin_at}
+                lang={lang}
+              />
+            )}
+            {invoice.paid_at && (
+              <ApprovalLine
+                icon={Wallet}
+                label={t.paidBy}
+                name={invoice.paid_by_name || "—"}
+                at={invoice.paid_at}
+                lang={lang}
+                accent="primary"
+              />
             )}
           </div>
         )}
 
-        {/* Motivo de recusa (mostra notes_supplier em destaque vermelho) */}
+        {/* Motivo de recusa */}
         {invoice.status === "recusada" && invoice.notes_supplier && (
           <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3">
             <p className="mb-0.5 text-xs font-semibold uppercase tracking-wider text-red-300">
@@ -417,41 +544,19 @@ function InvoiceDetail({ id }: { id: string }) {
         t={t}
       />
 
-      {/* Acoes */}
-      {(canApprove || canReject || canPay) && (
-        <div className="mt-6 flex flex-wrap gap-3">
-          {canApprove && (
-            <button
-              onClick={() => setPendingAction("approve")}
-              className="flex items-center gap-2 rounded-lg bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/25"
-            >
-              <CheckCircle2 className="h-4 w-4" />
-              {t.approve}
-            </button>
-          )}
-          {canPay && (
-            <button
-              onClick={() => setPendingAction("pay")}
-              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
-            >
-              {t.markPaid}
-            </button>
-          )}
-          {canReject && (
-            <button
-              onClick={() => setPendingAction("reject")}
-              className="flex items-center gap-2 rounded-lg bg-red-500/15 px-4 py-2 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/25"
-            >
-              {t.reject}
-            </button>
-          )}
-        </div>
-      )}
+      {/* Timeline */}
+      <InvoiceEvents invoiceId={id} key={eventsRefreshKey} />
 
       {pendingAction && (
         <ActionModal
           action={pendingAction}
+          adminCompletingFlow={adminCompletingFlow}
+          adminUsers={adminUsers}
+          paidByAssigneeId={paidByAssigneeId}
+          setPaidByAssigneeId={setPaidByAssigneeId}
+          loadingUsers={loadingUsers}
           t={t}
+          invoiceNumber={invoice.invoice_number}
           rejectNotes={rejectNotes}
           setRejectNotes={setRejectNotes}
           rejectInternalNotes={rejectInternalNotes}
@@ -461,6 +566,7 @@ function InvoiceDetail({ id }: { id: string }) {
             setPendingAction(null);
             setRejectNotes("");
             setRejectInternalNotes("");
+            setPaidByAssigneeId("");
           }}
           onConfirm={executeAction}
         />
@@ -482,6 +588,121 @@ function InvoiceDetail({ id }: { id: string }) {
   );
 }
 
+function ActionsBar({
+  role,
+  invoice,
+  t,
+  canApproveAsAdm,
+  canApproveAsAdmin,
+  canReject,
+  canPay,
+  youApprovedAsAdm,
+  youApprovedAsAdmin,
+  onApproveAdm,
+  onApproveAdmin,
+  onReject,
+  onPay
+}: {
+  role: string;
+  invoice: Invoice;
+  t: any;
+  canApproveAsAdm: boolean;
+  canApproveAsAdmin: boolean;
+  canReject: boolean;
+  canPay: boolean;
+  youApprovedAsAdm: boolean;
+  youApprovedAsAdmin: boolean;
+  onApproveAdm: () => void;
+  onApproveAdmin: () => void;
+  onReject: () => void;
+  onPay: () => void;
+}) {
+  return (
+    <div className="mb-6 flex flex-wrap gap-3">
+      {role === "adm_campanha" &&
+        invoice.status === "em_analise" &&
+        (canApproveAsAdm ? (
+          <button
+            onClick={onApproveAdm}
+            className="flex items-center gap-2 rounded-lg bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            {t.approveAdm}
+          </button>
+        ) : youApprovedAsAdm ? (
+          <span className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300 opacity-80">
+            <CheckCircle2 className="h-4 w-4" />
+            {t.youApproved}
+          </span>
+        ) : null)}
+
+      {role === "admin" &&
+        invoice.status === "em_analise" &&
+        (canApproveAsAdmin ? (
+          <button
+            onClick={onApproveAdmin}
+            className="flex items-center gap-2 rounded-lg bg-emerald-500/15 px-4 py-2 text-sm font-semibold text-emerald-300 transition-colors hover:bg-emerald-500/25"
+          >
+            <CheckCircle2 className="h-4 w-4" />
+            {t.approveAdmin}
+          </button>
+        ) : youApprovedAsAdmin ? (
+          <span className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-4 py-2 text-sm text-emerald-300 opacity-80">
+            <CheckCircle2 className="h-4 w-4" />
+            {t.youApprovedAdmin}
+          </span>
+        ) : null)}
+
+      {canPay && (
+        <button
+          onClick={onPay}
+          className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+        >
+          <Wallet className="h-4 w-4" />
+          {t.markPaid}
+        </button>
+      )}
+
+      {canReject && (
+        <button
+          onClick={onReject}
+          className="flex items-center gap-2 rounded-lg bg-red-500/15 px-4 py-2 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/25"
+        >
+          {t.reject}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ApprovalLine({
+  icon: Icon,
+  label,
+  name,
+  at,
+  lang,
+  accent
+}: {
+  icon: React.ElementType;
+  label: string;
+  name: string;
+  at: string;
+  lang: "pt" | "en";
+  accent?: "primary";
+}) {
+  const color = accent === "primary" ? "text-primary" : "text-emerald-300";
+  return (
+    <div className="flex items-start gap-2 text-sm">
+      <Icon className={`mt-0.5 h-4 w-4 ${color}`} />
+      <p className="text-muted">
+        {label}:{" "}
+        <span className="font-medium text-foreground">{name}</span>{" "}
+        <span className="text-xs">— {fmtDateTime(at, lang)}</span>
+      </p>
+    </div>
+  );
+}
+
 function AssigneeBlock({
   invoice,
   role,
@@ -495,7 +716,6 @@ function AssigneeBlock({
 }) {
   const canManage = role === "admin" || role === "adm_campanha";
 
-  // Publisher: so ve o nome se houver. Sem botao.
   if (!canManage) {
     if (!invoice.assignee_name) return null;
     return (
@@ -644,7 +864,6 @@ function NotesPanels({
 }) {
   const canEdit = role === "admin" || role === "adm_campanha";
 
-  // Publisher so ve notes_supplier (read-only). Se vazio, esconde painel.
   if (!canEdit) {
     if (!invoice.notes_supplier) return null;
     return (
@@ -659,7 +878,6 @@ function NotesPanels({
     );
   }
 
-  // Admin / adm_campanha: 2 paineis editaveis
   const dirty =
     (notesSupplier || "") !== (invoice.notes_supplier || "") ||
     (notesInternal || "") !== (invoice.notes_internal || "");
@@ -725,7 +943,13 @@ function Row({ label, value, bold }: { label: string; value: string; bold?: bool
 
 function ActionModal({
   action,
+  adminCompletingFlow,
+  adminUsers,
+  paidByAssigneeId,
+  setPaidByAssigneeId,
+  loadingUsers,
   t,
+  invoiceNumber,
   rejectNotes,
   setRejectNotes,
   rejectInternalNotes,
@@ -735,7 +959,13 @@ function ActionModal({
   onConfirm
 }: {
   action: Action;
+  adminCompletingFlow: boolean;
+  adminUsers: NfUser[];
+  paidByAssigneeId: string;
+  setPaidByAssigneeId: (v: string) => void;
+  loadingUsers: boolean;
   t: any;
+  invoiceNumber: string;
   rejectNotes: string;
   setRejectNotes: (v: string) => void;
   rejectInternalNotes: string;
@@ -744,8 +974,18 @@ function ActionModal({
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const isApproveAdminDouble =
+    action === "approve_admin" && adminCompletingFlow;
+
   const title =
-    action === "approve" ? t.confirmApprove : action === "pay" ? t.confirmPay : t.confirmReject;
+    action === "reject"
+      ? t.confirmReject
+      : action === "pay"
+      ? t.confirmPay
+      : isApproveAdminDouble
+      ? `${t.confirmApproveDouble} #${invoiceNumber}`
+      : t.confirmApproveSingle;
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
@@ -789,6 +1029,38 @@ function ActionModal({
               </div>
             </>
           )}
+
+          {isApproveAdminDouble && (
+            <>
+              <p className="text-sm text-muted">{t.completesFlow}</p>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">
+                  {t.designatePayer}
+                </label>
+                {loadingUsers ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-muted">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {t.saving}
+                  </div>
+                ) : (
+                  <select
+                    value={paidByAssigneeId}
+                    onChange={(e) => setPaidByAssigneeId(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
+                  >
+                    <option value="">{t.designateNobody}</option>
+                    {adminUsers.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name || u.email}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <p className="mt-1.5 text-xs text-muted">{t.designatePayerHint}</p>
+              </div>
+            </>
+          )}
+
           <div className="flex gap-3 pt-2">
             <button
               onClick={onCancel}
@@ -807,6 +1079,8 @@ function ActionModal({
                   <Loader2 className="h-4 w-4 animate-spin" />
                   {t.saving}
                 </>
+              ) : isApproveAdminDouble ? (
+                t.confirmApproval
               ) : (
                 t.confirm
               )}

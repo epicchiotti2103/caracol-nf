@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   FileText,
   Search,
@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
+import { ApprovalBadge, OverdueBadge } from "@/components/nf/approval-badge";
+import { DashboardChips } from "@/components/nf/dashboard-chips";
 import { useAuth } from "@/lib/auth-context";
 import {
   useNfRole,
@@ -28,7 +30,7 @@ import {
   usePendingAssignedCount
 } from "@/lib/nf-role-context";
 import { apiFetch } from "@/lib/api";
-import { fmtCurrency, fmtDate, fmtRefMonth, i18n, tr } from "@/lib/i18n";
+import { fmtCurrency, fmtDate, fmtRefMonth, tr } from "@/lib/i18n";
 import type { DashboardSummary, Invoice, InvoiceStatus } from "@/types";
 
 const STATUS_OPTIONS: { value: InvoiceStatus | "todos"; pt: string; en: string }[] = [
@@ -42,7 +44,15 @@ const STATUS_OPTIONS: { value: InvoiceStatus | "todos"; pt: string; en: string }
 export default function HomePage() {
   return (
     <AppShell>
-      <HomeContent />
+      <Suspense
+        fallback={
+          <div className="flex min-h-[40vh] items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          </div>
+        }
+      >
+        <HomeContent />
+      </Suspense>
     </AppShell>
   );
 }
@@ -51,6 +61,7 @@ function HomeContent() {
   const role = useNfRole();
   const lang = langForRole(role);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const pendingAssignedCount = usePendingAssignedCount();
 
@@ -59,10 +70,14 @@ function HomeContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "todos">("todos");
+
+  // Filtros (com deep-link via querystring)
+  const initialStatus = (searchParams?.get("status") as InvoiceStatus | "todos") || "todos";
+  const initialVencida = searchParams?.get("vencida") === "1";
+  const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "todos">(initialStatus);
+  const [overdueOnly, setOverdueOnly] = useState<boolean>(initialVencida);
   const [mineOnly, setMineOnly] = useState(false);
 
-  // Banner so faz sentido pra admin/adm_campanha (publisher tem count = 0 do backend de qualquer jeito).
   const showAssignedBanner =
     (role === "admin" || role === "adm_campanha") && pendingAssignedCount > 0;
 
@@ -93,6 +108,19 @@ function HomeContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
+  // Sincroniza filtro com query string (sem recarregar pagina)
+  useEffect(() => {
+    const qs = new URLSearchParams();
+    if (statusFilter !== "todos") qs.set("status", statusFilter);
+    if (overdueOnly) qs.set("vencida", "1");
+    const next = qs.toString();
+    const cur = (searchParams?.toString() || "");
+    if (next !== cur) {
+      router.replace(`/${next ? `?${next}` : ""}`, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusFilter, overdueOnly]);
+
   const filtered = useMemo(() => {
     return invoices.filter((inv) => {
       const matchStatus = statusFilter === "todos" || inv.status === statusFilter;
@@ -103,9 +131,10 @@ function HomeContent() {
         (!!user?.id &&
           inv.assignee_id === user.id &&
           inv.status === "em_analise");
-      return matchStatus && matchSearch && matchMine;
+      const matchOverdue = !overdueOnly || !!inv.is_vencida;
+      return matchStatus && matchSearch && matchMine && matchOverdue;
     });
-  }, [invoices, search, statusFilter, mineOnly, user?.id]);
+  }, [invoices, search, statusFilter, mineOnly, overdueOnly, user?.id]);
 
   const titlePt = role === "admin" ? "Painel admin" : "Notas fiscais";
   const subtitlePt =
@@ -114,6 +143,20 @@ function HomeContent() {
       : role === "adm_campanha"
       ? "Notas das campanhas"
       : "Minhas notas";
+
+  // Counts pros chips: prioriza valores agregados do backend (summary novo),
+  // com fallback nas listas locais caso o backend ainda nao tenha esses campos.
+  const localOverdueCount = invoices.filter((i) => i.is_vencida).length;
+  const localPendingCount = invoices.filter((i) => i.status === "em_analise").length;
+  const localToPayCount = invoices.filter((i) => i.status === "aprovada").length;
+
+  const chipCounts = {
+    pending: summary?.pending_approvals_count ?? localPendingCount,
+    topay: summary?.to_pay_count ?? localToPayCount,
+    overdue: summary?.overdue_count ?? localOverdueCount
+  };
+
+  const showDashboardChips = role === "admin" || role === "adm_campanha";
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -155,6 +198,9 @@ function HomeContent() {
           )}
         </div>
       </div>
+
+      {/* Chips de status do dashboard */}
+      {showDashboardChips && <DashboardChips counts={chipCounts} />}
 
       {showAssignedBanner && (
         <button
@@ -257,6 +303,19 @@ function HomeContent() {
                 {opt[lang]}
               </button>
             ))}
+            {role !== "publisher" && (
+              <button
+                onClick={() => setOverdueOnly((v) => !v)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  overdueOnly
+                    ? "bg-red-500/30 text-red-100"
+                    : "bg-background text-muted hover:text-foreground"
+                }`}
+                title="Apenas vencidas"
+              >
+                Vencidas
+              </button>
+            )}
           </div>
         </div>
 
@@ -277,13 +336,13 @@ function HomeContent() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center">
+                  <td colSpan={12} className="py-16 text-center">
                     <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="py-16 text-center">
+                  <td colSpan={12} className="py-16 text-center">
                     <FileText className="mx-auto mb-3 h-8 w-8 opacity-20" />
                     <p className="text-sm text-muted">
                       {invoices.length === 0
@@ -339,7 +398,16 @@ function HomeContent() {
 
 function headersFor(role: string): string[] {
   if (role === "publisher") {
-    return ["Invoice #", "Amount", "Due Date", "Reference Month", "Campaign", "Status", "PDF", ""];
+    return [
+      "Invoice #",
+      "Amount",
+      "Due Date",
+      "Reference Month",
+      "Campaign",
+      "Status",
+      "PDF",
+      ""
+    ];
   }
   return [
     "NF",
@@ -348,6 +416,7 @@ function headersFor(role: string): string[] {
     "Mes Ref",
     "Campanha",
     "Status",
+    "Aprovacoes",
     "Publisher",
     "Responsavel",
     "PDF",
@@ -391,8 +460,13 @@ function InvoiceRow({
       <td className="whitespace-nowrap px-5 py-4 font-medium text-foreground">
         {fmtCurrency(invoice.amount || 0, lang)}
       </td>
-      <td className="whitespace-nowrap px-5 py-4 text-muted">
-        {fmtDate(invoice.due_date, lang)}
+      <td className="whitespace-nowrap px-5 py-4">
+        <div className="flex flex-col gap-1">
+          <span className="text-muted">{fmtDate(invoice.due_date, lang)}</span>
+          {invoice.is_vencida && invoice.status !== "paga" && (
+            <OverdueBadge invoice={invoice} />
+          )}
+        </div>
       </td>
       <td className="whitespace-nowrap px-5 py-4 text-muted">
         {fmtRefMonth(invoice.reference_month, lang)}
@@ -403,6 +477,11 @@ function InvoiceRow({
       <td className="whitespace-nowrap px-5 py-4">
         <StatusBadge status={invoice.status} lang={lang} />
       </td>
+      {role !== "publisher" && (
+        <td className="whitespace-nowrap px-5 py-4">
+          <ApprovalBadge invoice={invoice} />
+        </td>
+      )}
       {role !== "publisher" && (
         <td className="px-5 py-4">
           <p className="text-xs text-foreground">{invoice.publisher_name || "—"}</p>

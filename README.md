@@ -6,7 +6,7 @@ Faz parte da suite Caracol — entrada pelo [Hub](https://github.com/epicchiotti
 
 ## Status: funcional (fase 1)
 
-CRUD de invoices funcionando, com upload de PDF, papeis intra-NF (publisher / adm_campanha / admin), workflow de status (`em_analise` → `aprovada` → `paga`, com `recusada` em qualquer ponto antes de paga) e dashboard de admin. Backend vive no Tracker em `tracker-caracol/backend/app/routes/nf.py` (rotas `/api/v1/nf/*`).
+CRUD de invoices funcionando, com upload de PDF, papeis intra-NF (publisher / adm_campanha / admin), **workflow de aprovacao dupla** (adm_campanha + admin → aprovada → paga, com `recusada` apenas em `em_analise`), dashboard com chips no topo (pendentes / a pagar / vencidas, com hovercard de preview) e timeline de eventos no detalhe da NF. Backend vive no Tracker em `tracker-caracol/backend/app/routes/nf.py` (rotas `/api/v1/nf/*`).
 
 ## Stack
 
@@ -20,8 +20,10 @@ CRUD de invoices funcionando, com upload de PDF, papeis intra-NF (publisher / ad
 - `/login` — login conectado ao Supabase Auth (via API do Tracker)
 - `/` — lista de notas fiscais (renderizacao diferente por papel; titulo, colunas e botoes adaptam)
 - `/invoice/new` — formulario de cadastro de NF com upload de PDF (form bilingual: ingles pra publisher, portugues pros outros). Admin/adm_campanha precisam selecionar o publisher num `<select>` obrigatorio (alimentado por `GET /nf/users` filtrado por `nf_role === "publisher"`); publisher cadastra direto pra si.
-- `/invoice/[id]` — detalhe da NF com auditoria (quem aprovou / quem pagou + timestamps) e acoes condicionais conforme papel
+- `/invoice/[id]` — detalhe com auditoria das 2 aprovacoes + pagamento, badges `2/2 aprovacoes` e `Vencida ha N dias`, acoes condicionais por papel (incluindo modal de "designar pagador" quando admin completa a dupla), painel de notas e **timeline de eventos** (`GET /nf/invoices/{id}/events`)
 - `/admin/usuarios-nf` — gestao de papeis intra-NF (apenas admin)
+
+No dashboard `/`, admins e adm_campanha veem **3 chips no topo** (pendentes / a pagar / vencidas). Cada chip abre um hovercard (com fallback de clique no mobile) listando ate 5 NFs do balde + link "ver todas" que aplica o filtro.
 
 A logo Caracol no header e clicavel e volta pro Hub.
 
@@ -37,18 +39,25 @@ Sao definidos numa tabela do backend e expostos por `GET /api/v1/nf/me/role`. O 
 
 Sem papel definido, o gate mostra "Seu perfil no NF nao foi configurado".
 
-## Workflow de status
+## Workflow de status (aprovacao dupla)
 
 ```
-em_analise --(approve)--> aprovada --(pay)--> paga
-     |                         |
-     +--(reject)----> recusada <+--(reject*)
+em_analise --(approve x2: adm_campanha + admin)--> aprovada --(pay, admin)--> paga
+     |
+     +--(reject + reason)--> recusada
 ```
-\* adm_campanha/admin podem recusar uma `aprovada` se necessario.
 
-Campos de auditoria: `approved_by` + `approved_at` (quem aprovou); `paid_by` + `paid_at` (quem pagou).
+Toda NF em `em_analise` precisa de DUAS aprovacoes: uma do `adm_campanha` e outra do `admin` (ordem nao importa). Os endpoints novos sao:
 
-Notas em 2 campos: `notes_supplier` (visivel a todos, mostrada ao publisher — carrega motivo de recusa quando aplicavel) e `notes_internal` (so admin/adm_campanha veem; backend mascara como `null` no payload do publisher). Editaveis a qualquer hora via `PATCH /nf/invoices/{id}/notes`.
+- `POST /nf/invoices/{id}/approve` — body opcional `{paid_by_assignee_id}`. Backend detecta o papel do caller e popula a coluna correta.
+- `POST /nf/invoices/{id}/reject` — body `{reason, notes_internal?}`. So funciona em `em_analise`.
+- `POST /nf/invoices/{id}/pay` — admin only.
+
+Quando o admin completa a dupla, a UI abre um modal "Aprovar NF #X" com a opcao opcional **Designar pagador** (dropdown de admins). Se preenchido, a NF fica com `paid_by_assignee_id`/`paid_by_assignee_name` setados e o detalhe exibe "Pagador designado: Nome". Qualquer admin ainda pode pagar; e so um sinal de fluxo.
+
+Campos de auditoria: `approval_adm_campanha_by/at`, `approval_admin_by/at`, `paid_by/at`, `paid_by_assignee_id`. Notas em 2 campos (`notes_supplier`, `notes_internal`) seguem como antes, editaveis via `PATCH /nf/invoices/{id}/notes`.
+
+Campos derivados retornados em `GET /nf/invoices*`: `is_vencida` (bool), `days_overdue` (number), `approvals_pending` (array com slots faltantes).
 
 ## Responsavel pela NF
 
