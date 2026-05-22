@@ -23,11 +23,12 @@ const MAX_PDF_MB = 10;
 // Safari/Firefox nao suportam <input type="month"> nativamente — viram texto
 // livre. Dropdown explicito garante UX consistente em todos os browsers + bate
 // exato com o filtro do dashboard (formato YYYY-MM).
-function buildRefMonthOptions(): Array<{ value: string; label: string }> {
+function buildRefMonthOptions(lang: "pt" | "en"): Array<{ value: string; label: string }> {
   const opts: Array<{ value: string; label: string }> = [];
   const today = new Date();
   today.setDate(1);
-  const formatter = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" });
+  const locale = lang === "pt" ? "pt-BR" : "en-US";
+  const formatter = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" });
   for (let i = 12; i >= -3; i--) {
     const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
     const y = d.getFullYear();
@@ -378,8 +379,8 @@ function NewInvoiceForm() {
               onChange={(e) => setRefMonth(e.target.value)}
               className={inputCls}
             >
-              <option value="">Selecione o mes</option>
-              {buildRefMonthOptions().map((opt) => (
+              <option value="">{lang === "pt" ? "Selecione o mes" : "Select a month"}</option>
+              {buildRefMonthOptions(lang).map((opt) => (
                 <option key={opt.value} value={opt.value}>
                   {opt.label}
                 </option>
