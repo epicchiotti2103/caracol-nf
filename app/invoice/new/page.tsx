@@ -19,6 +19,27 @@ import type { NfUser } from "@/types";
 
 const MAX_PDF_MB = 10;
 
+// Gera opcoes do dropdown Mes de referencia: 12 passados + atual + 3 futuros.
+// Safari/Firefox nao suportam <input type="month"> nativamente — viram texto
+// livre. Dropdown explicito garante UX consistente em todos os browsers + bate
+// exato com o filtro do dashboard (formato YYYY-MM).
+function buildRefMonthOptions(): Array<{ value: string; label: string }> {
+  const opts: Array<{ value: string; label: string }> = [];
+  const today = new Date();
+  today.setDate(1);
+  const formatter = new Intl.DateTimeFormat("pt-BR", { month: "long", year: "numeric" });
+  for (let i = 12; i >= -3; i--) {
+    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const value = `${y}-${m}`;
+    const labelRaw = formatter.format(d);
+    const label = labelRaw.charAt(0).toUpperCase() + labelRaw.slice(1);
+    opts.push({ value, label });
+  }
+  return opts.reverse(); // mais recente primeiro
+}
+
 export default function NewInvoicePage() {
   return (
     <AppShell>
@@ -352,13 +373,18 @@ function NewInvoiceForm() {
             <label className="mb-1.5 block text-sm font-medium text-foreground">
               {labels.refMonth} <span className="text-primary">*</span>
             </label>
-            <input
-              type="month"
+            <select
               value={refMonth}
               onChange={(e) => setRefMonth(e.target.value)}
               className={inputCls}
-              style={{ colorScheme: "dark" }}
-            />
+            >
+              <option value="">Selecione o mes</option>
+              {buildRefMonthOptions().map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-foreground">
