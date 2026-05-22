@@ -81,7 +81,8 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `POST /nf/invoices` — cria (multipart, campo `pdf` opcional). Admin/adm_campanha **devem** enviar `publisher_id`; publisher cadastrando pra si nao precisa. Form envia `moeda` (`BRL` ou `USD`, default `BRL`) — campo novo, backend trata `undefined` como `BRL` pra graceful degradation.
 - `POST /nf/invoices/{id}/approve` — body opcional `{paid_by_assignee_id}`. Backend detecta papel do caller (adm_campanha ou admin) e popula a coluna certa. Quando ambas aprovacoes existem, status vai pra `aprovada`. Se for admin completando a dupla, ele pode designar pagador via `paid_by_assignee_id`.
 - `POST /nf/invoices/{id}/reject` — body `{reason, notes_internal?}`. So funciona em `em_analise`. `reason` vai pra `notes_supplier`.
-- `POST /nf/invoices/{id}/pay` — admin only. Marca como `paga`.
+- `POST /nf/invoices/{id}/pay` — admin only. **Multipart/form-data** com campo `proof` obrigatorio (PNG, JPEG ou PDF, max 10MB). Marca como `paga` e grava `paid_proof_path` no storage.
+- `GET /nf/invoices/{id}/proof` — `{url}` assinada (5min) pra baixar o comprovante de pagamento.
 - `PATCH /nf/invoices/{id}/notes` — `{notes_supplier?, notes_internal?}` (admin OU adm_campanha) — edita notas sem mudar status
 - `PATCH /nf/invoices/{id}/assignee` — `{assignee_id: string | null}` (admin OU adm_campanha) — grava evento na timeline
 - `GET /nf/dashboard/summary` — agregacoes. Alem dos baldes legados (`pending_review`, `to_pay`, `paid_last_30d` em **BRL**), traz `pending_approvals_count`, `to_pay_count`, `overdue_count` pros chips do topo + os totais por moeda `to_pay_brl`/`to_pay_usd`, `overdue_brl`/`overdue_usd`, `paid_last_30d_brl`/`paid_last_30d_usd` (frontend trata `undefined` -> 0 enquanto backend nao deploya)
@@ -198,6 +199,7 @@ NEXT_PUBLIC_HUB_URL=https://app.aeobr.com.br
 - [x] Separacao `publisher` (parceiro) vs `submitted_by` (quem cadastrou): admin/adm_campanha tem `<select>` obrigatorio de publisher no `/invoice/new` (envia `publisher_id` no FormData) e o detalhe mostra "Cadastrado por: X" quando os dois diferem
 - [x] Dashboard admin (em_analise_count, a_pagar_amount, pagas_30d_amount) — agora com 2 linhas R$/US$ nos stat cards "A pagar" e "Pagas (30d)"
 - [x] Moeda por NF (BRL/USD): dropdown obrigatorio no form, prefix dinamico no campo Valor, totais separados no rodape da lista e nos stat cards do dashboard
+- [x] Marcar NF como paga exige **comprovante** (modal de upload PNG/JPEG/PDF max 10MB → multipart pra `POST /pay`); detalhe exibe botao "Baixar comprovante" quando `paid_proof_path` esta setado (consome `GET /nf/invoices/{id}/proof`)
 - [x] Gestao de papeis intra-NF (`/admin/usuarios-nf`)
 - [x] Logo Caracol clicavel volta pro Hub
 - [ ] Cadastro de campanhas como entidade propria (hoje e texto livre)

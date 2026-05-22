@@ -49,6 +49,9 @@ export interface Invoice {
   paid_at?: string | null;
   paid_by_assignee_id?: string | null;
   paid_by_assignee_name?: string | null;
+  // Caminho no storage do comprovante de pagamento (PNG/JPEG/PDF).
+  // Backend ainda em deploy — frontend trata `undefined`/`null` como "sem comprovante".
+  paid_proof_path?: string | null;
   created_at: string;
   updated_at?: string | null;
   // Derivados pelo backend (novos em GET /nf/invoices*)

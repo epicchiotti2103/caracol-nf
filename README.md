@@ -51,9 +51,11 @@ Toda NF em `em_analise` precisa de DUAS aprovacoes: uma do `adm_campanha` e outr
 
 - `POST /nf/invoices/{id}/approve` — body opcional `{paid_by_assignee_id}`. Backend detecta o papel do caller e popula a coluna correta.
 - `POST /nf/invoices/{id}/reject` — body `{reason, notes_internal?}`. So funciona em `em_analise`.
-- `POST /nf/invoices/{id}/pay` — admin only.
+- `POST /nf/invoices/{id}/pay` — admin only. **Multipart/form-data** com campo `proof` obrigatorio (PNG, JPEG ou PDF, max 10MB). UI abre modal com upload antes de confirmar; backend grava `paid_proof_path` no storage.
 
 Quando o admin completa a dupla, a UI abre um modal "Aprovar NF #X" com a opcao opcional **Designar pagador** (dropdown de admins). Se preenchido, a NF fica com `paid_by_assignee_id`/`paid_by_assignee_name` setados e o detalhe exibe "Pagador designado: Nome". Qualquer admin ainda pode pagar; e so um sinal de fluxo.
+
+Ao marcar como paga, o admin abre um modal de upload e anexa o **comprovante de pagamento** (PNG/JPEG/PDF, max 10MB). O backend grava `paid_proof_path` e o detalhe ganha um botao "Baixar comprovante" que abre uma URL assinada (`GET /nf/invoices/{id}/proof`).
 
 Campos de auditoria: `approval_adm_campanha_by/at`, `approval_admin_by/at`, `paid_by/at`, `paid_by_assignee_id`. Notas em 2 campos (`notes_supplier`, `notes_internal`) seguem como antes, editaveis via `PATCH /nf/invoices/{id}/notes`.
 

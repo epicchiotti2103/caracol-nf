@@ -25,6 +25,10 @@ import type { Invoice, NfUser } from "@/types";
 
 type Action = "approve_adm" | "approve_admin" | "reject" | "pay";
 
+const PROOF_MAX_MB = 10;
+const PROOF_ACCEPT = "image/png,image/jpeg,application/pdf";
+const PROOF_MIMES = new Set(["image/png", "image/jpeg", "application/pdf"]);
+
 export default function InvoiceDetailPage({ params }: { params: { id: string } }) {
   return (
     <AppShell>
@@ -48,6 +52,9 @@ function InvoiceDetail({ id }: { id: string }) {
   const [rejectInternalNotes, setRejectInternalNotes] = useState("");
   const [paidByAssigneeId, setPaidByAssigneeId] = useState<string>("");
   const [acting, setActing] = useState(false);
+  // Upload do comprovante de pagamento (modal "Marcar como paga")
+  const [proofFile, setProofFile] = useState<File | null>(null);
+  const [proofError, setProofError] = useState("");
   // Bump usado pra refrescar a timeline apos acoes
   const [eventsRefreshKey, setEventsRefreshKey] = useState(0);
 
@@ -76,6 +83,28 @@ function InvoiceDetail({ id }: { id: string }) {
     submittedBy: lang === "pt" ? "Cadastrado por" : "Submitted by",
     createdAt: lang === "pt" ? "Enviada em" : "Sent at",
     downloadPdf: lang === "pt" ? "Baixar PDF" : "Download PDF",
+    downloadProof:
+      lang === "pt" ? "Baixar comprovante" : "Download proof",
+    proofLabel:
+      lang === "pt"
+        ? "Anexe o comprovante de pagamento (PNG, JPEG ou PDF, max 10MB)"
+        : "Attach the payment proof (PNG, JPEG or PDF, max 10MB)",
+    proofFileLabel:
+      lang === "pt" ? "Comprovante" : "Proof",
+    proofRequired:
+      lang === "pt" ? "Anexe o comprovante." : "Attach the proof.",
+    proofTooBig:
+      lang === "pt"
+        ? `Arquivo muito grande (max ${PROOF_MAX_MB}MB).`
+        : `File too large (max ${PROOF_MAX_MB}MB).`,
+    proofWrongType:
+      lang === "pt"
+        ? "Tipo invalido. Use PNG, JPEG ou PDF."
+        : "Invalid type. Use PNG, JPEG or PDF.",
+    proofConfirm:
+      lang === "pt" ? "Confirmar pagamento" : "Confirm payment",
+    payTitle: lang === "pt" ? "Marcar NF" : "Mark invoice",
+    asPaid: lang === "pt" ? "como paga" : "as paid",
     approveAdm: "Aprovar (adm campanha)",
     approveAdmin: "Aprovar (admin)",
     youApproved: "Voce aprovou — aguardando admin",
@@ -246,6 +275,15 @@ function InvoiceDetail({ id }: { id: string }) {
     }
   };
 
+  const downloadProof = async () => {
+    try {
+      const res: { url: string } = await apiFetch(`/nf/invoices/${id}/proof`);
+      if (res?.url) window.open(res.url, "_blank", "noopener,noreferrer");
+    } catch (err: any) {
+      toast.error(err?.message || (lang === "pt" ? "Falha ao gerar link" : "Failed"));
+    }
+  };
+
   // Derivacoes
   // Considera "ja aprovou" se qualquer um dos campos vier do backend (_at OU _by).
   // Algumas respostas (POST /approve) podem nao popular ambos imediatamente.
@@ -311,9 +349,26 @@ function InvoiceDetail({ id }: { id: string }) {
         });
         successMsg = t.approvedOk;
       } else if (pendingAction === "pay") {
+        if (!proofFile) {
+          setProofError(t.proofRequired);
+          setActing(false);
+          return;
+        }
+        if (!PROOF_MIMES.has(proofFile.type)) {
+          setProofError(t.proofWrongType);
+          setActing(false);
+          return;
+        }
+        if (proofFile.size > PROOF_MAX_MB * 1024 * 1024) {
+          setProofError(t.proofTooBig);
+          setActing(false);
+          return;
+        }
+        const fd = new FormData();
+        fd.append("proof", proofFile);
         updated = await apiFetch(`/nf/invoices/${id}/pay`, {
           method: "POST",
-          body: JSON.stringify({})
+          body: fd
         });
         successMsg = t.paidOk;
       } else {
@@ -341,6 +396,8 @@ function InvoiceDetail({ id }: { id: string }) {
       setRejectNotes("");
       setRejectInternalNotes("");
       setPaidByAssigneeId("");
+      setProofFile(null);
+      setProofError("");
       setEventsRefreshKey((k) => k + 1);
       // Ressincroniza pra pegar campos derivados possivelmente ausentes na resposta direta
       refreshInvoice();
@@ -480,15 +537,26 @@ function InvoiceDetail({ id }: { id: string }) {
           )}
         <Row label={t.createdAt} value={fmtDateTime(invoice.created_at, lang)} />
 
-        {invoice.pdf_path && (
-          <div className="border-t border-border pt-4">
-            <button
-              onClick={downloadPdf}
-              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
-            >
-              <Download className="h-4 w-4" />
-              {t.downloadPdf}
-            </button>
+        {(invoice.pdf_path || invoice.paid_proof_path) && (
+          <div className="flex flex-wrap items-center gap-3 border-t border-border pt-4">
+            {invoice.pdf_path && (
+              <button
+                onClick={downloadPdf}
+                className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-black transition-opacity hover:opacity-90"
+              >
+                <Download className="h-4 w-4" />
+                {t.downloadPdf}
+              </button>
+            )}
+            {invoice.paid_proof_path && (
+              <button
+                onClick={downloadProof}
+                className="flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-sm font-semibold text-primary transition-colors hover:bg-primary/15"
+              >
+                <Download className="h-4 w-4" />
+                {t.downloadProof}
+              </button>
+            )}
           </div>
         )}
 
@@ -572,12 +640,20 @@ function InvoiceDetail({ id }: { id: string }) {
           setRejectNotes={setRejectNotes}
           rejectInternalNotes={rejectInternalNotes}
           setRejectInternalNotes={setRejectInternalNotes}
+          proofFile={proofFile}
+          setProofFile={(f) => {
+            setProofError("");
+            setProofFile(f);
+          }}
+          proofError={proofError}
           loading={acting}
           onCancel={() => {
             setPendingAction(null);
             setRejectNotes("");
             setRejectInternalNotes("");
             setPaidByAssigneeId("");
+            setProofFile(null);
+            setProofError("");
           }}
           onConfirm={executeAction}
         />
@@ -969,6 +1045,9 @@ function ActionModal({
   setRejectNotes,
   rejectInternalNotes,
   setRejectInternalNotes,
+  proofFile,
+  setProofFile,
+  proofError,
   loading,
   onCancel,
   onConfirm
@@ -985,6 +1064,9 @@ function ActionModal({
   setRejectNotes: (v: string) => void;
   rejectInternalNotes: string;
   setRejectInternalNotes: (v: string) => void;
+  proofFile: File | null;
+  setProofFile: (f: File | null) => void;
+  proofError: string;
   loading: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -996,7 +1078,7 @@ function ActionModal({
     action === "reject"
       ? t.confirmReject
       : action === "pay"
-      ? t.confirmPay
+      ? `${t.payTitle} #${invoiceNumber} ${t.asPaid}`
       : isApproveAdminDouble
       ? `${t.confirmApproveDouble} #${invoiceNumber}`
       : t.confirmApproveSingle;
@@ -1045,6 +1127,31 @@ function ActionModal({
             </>
           )}
 
+          {action === "pay" && (
+            <>
+              <p className="text-sm text-muted">{t.proofLabel}</p>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">
+                  {t.proofFileLabel} <span className="text-primary">*</span>
+                </label>
+                <input
+                  type="file"
+                  accept={PROOF_ACCEPT}
+                  onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
+                  className="block w-full text-sm text-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-semibold file:text-black hover:file:opacity-90"
+                />
+                {proofFile && (
+                  <p className="mt-1 text-xs text-muted">
+                    {proofFile.name} · {(proofFile.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                )}
+                {proofError && (
+                  <p className="mt-1 text-xs text-danger">{proofError}</p>
+                )}
+              </div>
+            </>
+          )}
+
           {isApproveAdminDouble && (
             <>
               <p className="text-sm text-muted">{t.completesFlow}</p>
@@ -1086,7 +1193,11 @@ function ActionModal({
             </button>
             <button
               onClick={onConfirm}
-              disabled={loading || (action === "reject" && !rejectNotes.trim())}
+              disabled={
+                loading ||
+                (action === "reject" && !rejectNotes.trim()) ||
+                (action === "pay" && !proofFile)
+              }
               className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
             >
               {loading ? (
@@ -1096,6 +1207,8 @@ function ActionModal({
                 </>
               ) : isApproveAdminDouble ? (
                 t.confirmApproval
+              ) : action === "pay" ? (
+                t.proofConfirm
               ) : (
                 t.confirm
               )}
