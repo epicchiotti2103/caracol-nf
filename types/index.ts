@@ -141,6 +141,10 @@ export interface InvoiceEvent {
   from_name?: string | null;
   to_name?: string | null;
   actor?: { id?: string | null; name?: string | null } | null;
+  // Backend retorna actor_name no top-level (string). Frontend prefere isso;
+  // o shape aninhado `actor.name` fica como fallback (legado).
+  actor_id?: string | null;
+  actor_name?: string | null;
   created_at: string;
 }
 

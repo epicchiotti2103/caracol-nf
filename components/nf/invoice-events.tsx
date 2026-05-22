@@ -151,7 +151,8 @@ function isNoopEvent(ev: InvoiceEvent): boolean {
 }
 
 function describeEvent(ev: InvoiceEvent): string {
-  const actorName = ev.actor?.name || "—";
+  // Backend retorna actor_name no top-level. Fallback pro shape antigo `actor.name`.
+  const actorName = ev.actor_name || ev.actor?.name || "—";
   const from = (ev.from_value || {}) as Record<string, any>;
   const to = (ev.to_value || {}) as Record<string, any>;
 
