@@ -314,8 +314,8 @@ function NewInvoiceForm() {
               {labels.amount} <span className="text-primary">*</span>
             </label>
             <div className="flex gap-2">
-              <div className="relative flex-1">
-                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
+              <div className="flex flex-1 items-center rounded-lg border border-border bg-surface px-3.5 transition-colors focus-within:border-primary/60">
+                <span className="pr-2 text-sm font-medium text-muted">
                   {moeda === "USD" ? "US$" : "R$"}
                 </span>
                 <input
@@ -323,17 +323,17 @@ function NewInvoiceForm() {
                   onChange={(e) => setAmount(e.target.value)}
                   inputMode="decimal"
                   placeholder="0,00"
-                  className={inputCls + " pl-12"}
+                  className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-foreground outline-none"
                 />
               </div>
               <select
                 value={moeda}
                 onChange={(e) => setMoeda(e.target.value as "BRL" | "USD")}
                 aria-label={labels.moedaLabel}
-                className={inputCls + " w-28 flex-shrink-0"}
+                className="w-24 flex-shrink-0 rounded-lg border border-border bg-surface px-3 py-2.5 text-sm text-foreground outline-none transition-colors focus:border-primary/60"
               >
-                <option value="BRL">R$ (BRL)</option>
-                <option value="USD">US$ (USD)</option>
+                <option value="BRL">BRL</option>
+                <option value="USD">USD</option>
               </select>
             </div>
           </div>
