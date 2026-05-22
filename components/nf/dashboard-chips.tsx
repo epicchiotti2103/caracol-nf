@@ -62,13 +62,16 @@ const TONE_CLASSES: Record<ChipDef["tone"], { chip: string; iconBg: string }> = 
 };
 
 export function DashboardChips({
-  counts
+  counts,
+  queryString = ""
 }: {
   counts: {
     pending: number;
     topay: number;
     overdue: number;
   };
+  // Quando setado, propaga filtros pros endpoints de hover E pro link "ver todas"
+  queryString?: string;
 }) {
   return (
     <div className="mb-6 flex flex-wrap gap-2">
@@ -77,25 +80,39 @@ export function DashboardChips({
           key={c.key}
           def={c}
           count={counts[c.key]}
+          queryString={queryString}
         />
       ))}
     </div>
   );
 }
 
-function ChipWithHover({ def, count }: { def: ChipDef; count: number }) {
+function ChipWithHover({
+  def,
+  count,
+  queryString
+}: {
+  def: ChipDef;
+  count: number;
+  queryString: string;
+}) {
   const [items, setItems] = useState<DashboardChipItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // Reseta cache do hover quando filtros mudam (chave = queryString)
+  useEffect(() => {
+    setItems(null);
+    setError("");
+  }, [queryString]);
 
   const ensureLoaded = async () => {
     if (items !== null || loading) return;
     setLoading(true);
     setError("");
     try {
-      const res: DashboardChipItem[] | { items: DashboardChipItem[] } = await apiFetch(
-        def.endpoint
-      );
+      const url = queryString ? `${def.endpoint}?${queryString}` : def.endpoint;
+      const res: DashboardChipItem[] | { items: DashboardChipItem[] } = await apiFetch(url);
       const list = Array.isArray(res) ? res : res?.items || [];
       setItems(list);
     } catch (err: any) {
@@ -105,6 +122,14 @@ function ChipWithHover({ def, count }: { def: ChipDef; count: number }) {
       setLoading(false);
     }
   };
+
+  // Append "ver todas" link mantendo filtros ativos
+  const filterHref = (() => {
+    const base = def.filterHref;
+    if (!queryString) return base;
+    const sep = base.includes("?") ? "&" : "?";
+    return `${base}${sep}${queryString}`;
+  })();
 
   const tone = TONE_CLASSES[def.tone];
   const Icon = def.Icon;
@@ -133,6 +158,7 @@ function ChipWithHover({ def, count }: { def: ChipDef; count: number }) {
           loading={loading}
           error={error}
           items={items}
+          filterHref={filterHref}
         />
       </HoverPopover>
     </div>
@@ -143,12 +169,14 @@ function ChipContent({
   def,
   loading,
   error,
-  items
+  items,
+  filterHref
 }: {
   def: ChipDef;
   loading: boolean;
   error: string;
   items: DashboardChipItem[] | null;
+  filterHref: string;
 }) {
   if (loading || items === null) {
     return (
@@ -217,7 +245,7 @@ function ChipContent({
       </ul>
       <div className="border-t border-border px-2 pt-2">
         <Link
-          href={def.filterHref}
+          href={filterHref}
           className="block rounded px-2 py-1.5 text-center text-[11px] font-semibold text-primary hover:bg-background"
         >
           ver todas

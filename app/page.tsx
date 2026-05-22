@@ -17,12 +17,14 @@ import {
   DollarSign,
   Inbox,
   ChevronRight,
-  X
+  X,
+  Filter
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { ApprovalBadge, OverdueBadge } from "@/components/nf/approval-badge";
 import { DashboardChips } from "@/components/nf/dashboard-chips";
+import { DateRangePicker } from "@/components/nf/date-range-picker";
 import { useAuth } from "@/lib/auth-context";
 import {
   useNfRole,
@@ -31,7 +33,12 @@ import {
 } from "@/lib/nf-role-context";
 import { apiFetch } from "@/lib/api";
 import { fmtCurrency, fmtDate, fmtRefMonth, tr } from "@/lib/i18n";
-import type { DashboardSummary, Invoice, InvoiceStatus } from "@/types";
+import type {
+  DashboardSummary,
+  Invoice,
+  InvoiceStatus,
+  NfUser
+} from "@/types";
 
 const STATUS_OPTIONS: { value: InvoiceStatus | "todos"; pt: string; en: string }[] = [
   { value: "todos", pt: "Todos", en: "All" },
@@ -40,6 +47,22 @@ const STATUS_OPTIONS: { value: InvoiceStatus | "todos"; pt: string; en: string }
   { value: "paga", pt: "Paga", en: "Paid" },
   { value: "recusada", pt: "Recusada", en: "Rejected" }
 ];
+
+// Opcoes de mes de referencia: ultimos 12 + proximos 3.
+// Format do valor: "YYYY-MM" (alinha com query param `reference_month` do backend).
+function makeRefMonthOptions(): { value: string; label: string }[] {
+  const today = new Date();
+  const opts: { value: string; label: string }[] = [];
+  for (let i = -12; i <= 3; i++) {
+    const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const value = `${y}-${m}`;
+    const label = d.toLocaleDateString("pt-BR", { month: "short", year: "numeric" });
+    opts.push({ value, label });
+  }
+  return opts;
+}
 
 export default function HomePage() {
   return (
@@ -71,26 +94,68 @@ function HomeContent() {
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
 
+  // Lista de users (pra dropdown de responsavel). So fetch quando admin/adm.
+  const [nfUsers, setNfUsers] = useState<NfUser[]>([]);
+
   // Filtros (com deep-link via querystring)
   const initialStatus = (searchParams?.get("status") as InvoiceStatus | "todos") || "todos";
   const initialVencida = searchParams?.get("vencida") === "1";
+  const initialDueStart = searchParams?.get("due_date_start") || "";
+  const initialDueEnd = searchParams?.get("due_date_end") || "";
+  const initialRefMonth = searchParams?.get("reference_month") || "";
+  const initialAssignee = searchParams?.get("assignee_id") || "";
+
   const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "todos">(initialStatus);
   const [overdueOnly, setOverdueOnly] = useState<boolean>(initialVencida);
+  const [dueDateStart, setDueDateStart] = useState<string>(initialDueStart);
+  const [dueDateEnd, setDueDateEnd] = useState<string>(initialDueEnd);
+  const [referenceMonth, setReferenceMonth] = useState<string>(initialRefMonth);
+  const [assigneeId, setAssigneeId] = useState<string>(initialAssignee);
   const [mineOnly, setMineOnly] = useState(false);
 
   const showAssignedBanner =
     (role === "admin" || role === "adm_campanha") && pendingAssignedCount > 0;
+  const showFilters = role === "admin" || role === "adm_campanha";
+
+  // Constroi querystring que vai pros endpoints (backend params: status,
+  // due_date_start, due_date_end, reference_month, assignee_id). Apenas server-side;
+  // search e overdueOnly continuam client-side.
+  const serverQuery = useMemo(() => {
+    const qs = new URLSearchParams();
+    if (statusFilter !== "todos") qs.set("status", statusFilter);
+    if (dueDateStart) qs.set("due_date_start", dueDateStart);
+    if (dueDateEnd) qs.set("due_date_end", dueDateEnd);
+    if (referenceMonth) qs.set("reference_month", referenceMonth);
+    if (assigneeId) {
+      // "me" e atalho client-side — converte pra user.id antes de mandar
+      const realId = assigneeId === "me" ? user?.id || "" : assigneeId;
+      if (realId) qs.set("assignee_id", realId);
+    }
+    return qs.toString();
+  }, [statusFilter, dueDateStart, dueDateEnd, referenceMonth, assigneeId, user?.id]);
+
+  const hasActiveFilters =
+    statusFilter !== "todos" ||
+    !!dueDateStart ||
+    !!dueDateEnd ||
+    !!referenceMonth ||
+    !!assigneeId ||
+    overdueOnly;
 
   const load = async () => {
     setLoading(true);
     setError("");
     try {
-      const list: { items: Invoice[]; total: number } | Invoice[] = await apiFetch("/nf/invoices");
+      const url = serverQuery ? `/nf/invoices?${serverQuery}` : "/nf/invoices";
+      const list: { items: Invoice[]; total: number } | Invoice[] = await apiFetch(url);
       const items = Array.isArray(list) ? list : list?.items || [];
       setInvoices(items);
       if (role === "admin") {
         try {
-          const s: DashboardSummary = await apiFetch("/nf/dashboard/summary");
+          const summaryUrl = serverQuery
+            ? `/nf/dashboard/summary?${serverQuery}`
+            : "/nf/dashboard/summary";
+          const s: DashboardSummary = await apiFetch(summaryUrl);
           setSummary(s);
         } catch {
           // summary opcional
@@ -106,28 +171,46 @@ function HomeContent() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role]);
+  }, [role, serverQuery]);
 
-  // Sincroniza filtro com query string (sem recarregar pagina)
+  // Carrega users uma vez (pra dropdown). So admin/adm tem permissao.
+  useEffect(() => {
+    if (!showFilters) return;
+    (async () => {
+      try {
+        const res: { items: NfUser[] } | NfUser[] = await apiFetch("/nf/users");
+        const items = Array.isArray(res) ? res : res?.items || [];
+        // So users com nf_role admin ou adm_campanha podem ser assignee
+        setNfUsers(items.filter((u) => u.nf_role === "admin" || u.nf_role === "adm_campanha"));
+      } catch {
+        // silencioso — dropdown fica vazio
+      }
+    })();
+  }, [showFilters]);
+
+  // Sincroniza filtros com query string da URL (sem recarregar)
   useEffect(() => {
     const qs = new URLSearchParams();
     if (statusFilter !== "todos") qs.set("status", statusFilter);
     if (overdueOnly) qs.set("vencida", "1");
+    if (dueDateStart) qs.set("due_date_start", dueDateStart);
+    if (dueDateEnd) qs.set("due_date_end", dueDateEnd);
+    if (referenceMonth) qs.set("reference_month", referenceMonth);
+    if (assigneeId) qs.set("assignee_id", assigneeId);
     const next = qs.toString();
-    const cur = (searchParams?.toString() || "");
+    const cur = searchParams?.toString() || "";
     if (next !== cur) {
       router.replace(`/${next ? `?${next}` : ""}`, { scroll: false });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, overdueOnly]);
+  }, [statusFilter, overdueOnly, dueDateStart, dueDateEnd, referenceMonth, assigneeId]);
 
   const filtered = useMemo(() => {
     return invoices.filter((inv) => {
       const matchStatus = statusFilter === "todos" || inv.status === statusFilter;
       const q = search.trim().toLowerCase();
       const matchSearch = !q || inv.invoice_number.toLowerCase().includes(q);
-      // mineOnly agora = "NFs em_analise onde MEU papel ainda precisa aprovar"
-      // (alinhado com `pending_my_approval_count` do banner). Bug 3.
+      // mineOnly = "NFs em_analise onde MEU papel ainda precisa aprovar"
       let matchMine = true;
       if (mineOnly) {
         if (!user?.id || inv.status !== "em_analise") {
@@ -166,6 +249,18 @@ function HomeContent() {
   };
 
   const showDashboardChips = role === "admin" || role === "adm_campanha";
+
+  const refMonthOptions = useMemo(() => makeRefMonthOptions(), []);
+
+  // Reseta todos os filtros pro estado default
+  const clearFilters = () => {
+    setStatusFilter("todos");
+    setOverdueOnly(false);
+    setDueDateStart("");
+    setDueDateEnd("");
+    setReferenceMonth("");
+    setAssigneeId("");
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -208,8 +303,147 @@ function HomeContent() {
         </div>
       </div>
 
+      {/* Linha de filtros (apenas para admin/adm_campanha) */}
+      {showFilters && (
+        <div className="mb-4 rounded-xl border border-border bg-surface px-4 py-3">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                Vencimento
+              </label>
+              <DateRangePicker
+                startDate={dueDateStart}
+                endDate={dueDateEnd}
+                onChange={(s, e) => {
+                  setDueDateStart(s);
+                  setDueDateEnd(e);
+                }}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                Mes de referencia
+              </label>
+              <select
+                value={referenceMonth}
+                onChange={(e) => setReferenceMonth(e.target.value)}
+                className="h-9 min-w-[160px] rounded-lg border border-border bg-background px-2 text-[13px] text-foreground outline-none focus:border-primary/50"
+              >
+                <option value="">Todos</option>
+                {refMonthOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                Responsavel
+              </label>
+              <select
+                value={assigneeId}
+                onChange={(e) => setAssigneeId(e.target.value)}
+                className="h-9 min-w-[180px] rounded-lg border border-border bg-background px-2 text-[13px] text-foreground outline-none focus:border-primary/50"
+              >
+                <option value="">Todos</option>
+                {user?.id && <option value="me">Eu</option>}
+                {nfUsers.map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name || u.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+                Status
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) =>
+                  setStatusFilter(e.target.value as InvoiceStatus | "todos")
+                }
+                className="h-9 min-w-[140px] rounded-lg border border-border bg-background px-2 text-[13px] text-foreground outline-none focus:border-primary/50"
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.pt}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="ml-auto inline-flex h-9 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[12px] font-medium text-muted hover:bg-surface/80 hover:text-foreground"
+                title="Limpar todos os filtros"
+              >
+                <X className="h-3.5 w-3.5" />
+                Limpar filtros
+              </button>
+            )}
+          </div>
+
+          {hasActiveFilters && (
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-border/60 pt-2">
+              <Filter className="h-3 w-3 text-muted" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+                Filtrado:
+              </span>
+              {(dueDateStart || dueDateEnd) && (
+                <ActivePill
+                  label={`Vencimento: ${dueDateStart || "..."} → ${dueDateEnd || "..."}`}
+                  onClear={() => {
+                    setDueDateStart("");
+                    setDueDateEnd("");
+                  }}
+                />
+              )}
+              {referenceMonth && (
+                <ActivePill
+                  label={`Mes ref: ${referenceMonth}`}
+                  onClear={() => setReferenceMonth("")}
+                />
+              )}
+              {assigneeId && (
+                <ActivePill
+                  label={`Resp: ${
+                    assigneeId === "me"
+                      ? "Eu"
+                      : nfUsers.find((u) => u.id === assigneeId)?.name || assigneeId.slice(0, 8)
+                  }`}
+                  onClear={() => setAssigneeId("")}
+                />
+              )}
+              {statusFilter !== "todos" && (
+                <ActivePill
+                  label={`Status: ${
+                    STATUS_OPTIONS.find((o) => o.value === statusFilter)?.pt || statusFilter
+                  }`}
+                  onClear={() => setStatusFilter("todos")}
+                />
+              )}
+              {overdueOnly && (
+                <ActivePill
+                  label="Apenas vencidas"
+                  onClear={() => setOverdueOnly(false)}
+                />
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Chips de status do dashboard */}
-      {showDashboardChips && <DashboardChips counts={chipCounts} />}
+      {showDashboardChips && (
+        <DashboardChips counts={chipCounts} queryString={serverQuery} />
+      )}
 
       {showAssignedBanner && (
         <button
@@ -300,34 +534,37 @@ function HomeContent() {
               className="w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm text-foreground outline-none focus:border-primary/50"
             />
           </div>
-          <div className="flex flex-wrap items-center gap-1">
-            {STATUS_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setStatusFilter(opt.value)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  statusFilter === opt.value
-                    ? "bg-primary text-black"
-                    : "bg-background text-muted hover:text-foreground"
-                }`}
-              >
-                {opt[lang]}
-              </button>
-            ))}
-            {role !== "publisher" && (
-              <button
-                onClick={() => setOverdueOnly((v) => !v)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  overdueOnly
-                    ? "bg-red-500/30 text-red-100"
-                    : "bg-background text-muted hover:text-foreground"
-                }`}
-                title="Apenas vencidas"
-              >
-                Vencidas
-              </button>
-            )}
-          </div>
+          {/* Quick filters (status pills) — apenas pra publisher (que nao ve a barra de filtros completa) */}
+          {!showFilters && (
+            <div className="flex flex-wrap items-center gap-1">
+              {STATUS_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setStatusFilter(opt.value)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    statusFilter === opt.value
+                      ? "bg-primary text-black"
+                      : "bg-background text-muted hover:text-foreground"
+                  }`}
+                >
+                  {opt[lang]}
+                </button>
+              ))}
+            </div>
+          )}
+          {showFilters && (
+            <button
+              onClick={() => setOverdueOnly((v) => !v)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                overdueOnly
+                  ? "bg-red-500/30 text-red-100"
+                  : "bg-background text-muted hover:text-foreground"
+              }`}
+              title="Apenas vencidas"
+            >
+              Vencidas
+            </button>
+          )}
         </div>
 
         <div className="overflow-x-auto">
@@ -421,6 +658,22 @@ function HomeContent() {
         )}
       </div>
     </div>
+  );
+}
+
+function ActivePill({ label, onClear }: { label: string; onClear: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[11px] text-primary">
+      {label}
+      <button
+        type="button"
+        onClick={onClear}
+        className="rounded p-0.5 hover:bg-primary/20"
+        title="Remover"
+      >
+        <X className="h-2.5 w-2.5" />
+      </button>
+    </span>
   );
 }
 
