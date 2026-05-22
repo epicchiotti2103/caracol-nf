@@ -192,7 +192,7 @@ function NewInvoiceForm() {
       // refMonth pode chegar como YYYY-MM; backend espera ISO de primeiro dia do mes
       const refIso = refMonth.length === 7 ? `${refMonth}-01` : refMonth;
       fd.append("reference_month", refIso);
-      fd.append("campaign", campaign.trim());
+      fd.append("campaign_name", campaign.trim());
       if (needsPublisherSelect && publisherId) {
         fd.append("publisher_id", publisherId);
       }
