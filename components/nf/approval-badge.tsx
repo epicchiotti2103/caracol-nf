@@ -33,8 +33,8 @@ function computeApprovalState(invoice: Invoice): {
   }
 
   // Fallback derivado dos campos approval_*
-  const admDone = !!invoice.approval_adm_campanha_at;
-  const adminDone = !!invoice.approval_admin_at;
+  const admDone = !!invoice.approved_by_adm_campanha_at;
+  const adminDone = !!invoice.approved_by_admin_at;
   const done = (admDone ? 1 : 0) + (adminDone ? 1 : 0);
   const pendingSlots: ApprovalSlot[] = [];
   if (!admDone) pendingSlots.push("adm_campanha");

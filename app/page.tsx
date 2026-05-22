@@ -133,9 +133,9 @@ function HomeContent() {
         if (!user?.id || inv.status !== "em_analise") {
           matchMine = false;
         } else if (role === "adm_campanha") {
-          matchMine = !inv.approval_adm_campanha_by && !inv.approval_adm_campanha_at;
+          matchMine = !inv.approved_by_adm_campanha_id && !inv.approved_by_adm_campanha_at;
         } else if (role === "admin") {
-          matchMine = !inv.approval_admin_by && !inv.approval_admin_at;
+          matchMine = !inv.approved_by_admin_id && !inv.approved_by_admin_at;
         } else {
           matchMine = false;
         }

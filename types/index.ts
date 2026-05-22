@@ -28,12 +28,12 @@ export interface Invoice {
   assignee_id?: string | null;
   assignee_name?: string | null;
   // Aprovacao dupla (novo fluxo)
-  approval_adm_campanha_by?: string | null;
-  approval_adm_campanha_by_name?: string | null;
-  approval_adm_campanha_at?: string | null;
-  approval_admin_by?: string | null;
-  approval_admin_by_name?: string | null;
-  approval_admin_at?: string | null;
+  approved_by_adm_campanha_id?: string | null;
+  approved_by_adm_campanha_name?: string | null;
+  approved_by_adm_campanha_at?: string | null;
+  approved_by_admin_id?: string | null;
+  approved_by_admin_name?: string | null;
+  approved_by_admin_at?: string | null;
   // Campos legados de aprovacao (mantidos pra compat: backend ainda pode popular)
   approved_by?: string | null;
   approved_by_name?: string | null;

@@ -250,21 +250,21 @@ function InvoiceDetail({ id }: { id: string }) {
   // Considera "ja aprovou" se qualquer um dos campos vier do backend (_at OU _by).
   // Algumas respostas (POST /approve) podem nao popular ambos imediatamente.
   const admApproved =
-    !!invoice?.approval_adm_campanha_at || !!invoice?.approval_adm_campanha_by;
+    !!invoice?.approved_by_adm_campanha_at || !!invoice?.approved_by_adm_campanha_id;
   const adminApproved =
-    !!invoice?.approval_admin_at || !!invoice?.approval_admin_by;
+    !!invoice?.approved_by_admin_at || !!invoice?.approved_by_admin_id;
   const isEmAnalise = invoice?.status === "em_analise";
   const isAprovada = invoice?.status === "aprovada";
 
   // Quem ja aprovou (consulta papel do user atual)
   const youApprovedAsAdm =
     !!user?.id &&
-    !!invoice?.approval_adm_campanha_by &&
-    invoice.approval_adm_campanha_by === user.id;
+    !!invoice?.approved_by_adm_campanha_id &&
+    invoice.approved_by_adm_campanha_id === user.id;
   const youApprovedAsAdmin =
     !!user?.id &&
-    !!invoice?.approval_admin_by &&
-    invoice.approval_admin_by === user.id;
+    !!invoice?.approved_by_admin_id &&
+    invoice.approved_by_admin_id === user.id;
 
   // So mostra botao "Aprovar" se: status em_analise + meu papel + EU ainda nao aprovei.
   // (Bug 1: antes checava so `!admApproved`, mas mesmo com `_at` setado a UI
@@ -489,27 +489,27 @@ function InvoiceDetail({ id }: { id: string }) {
         )}
 
         {/* Auditoria de aprovacao/pagamento */}
-        {(invoice.approval_adm_campanha_at ||
-          invoice.approval_admin_at ||
+        {(invoice.approved_by_adm_campanha_at ||
+          invoice.approved_by_admin_at ||
           invoice.paid_at) && (
           <div className="space-y-2 border-t border-border pt-4">
-            {invoice.approval_adm_campanha_at && (
+            {invoice.approved_by_adm_campanha_at && (
               <ApprovalLine
                 icon={CheckCircle2}
                 label={t.approvedAdmBy}
                 name={
-                  invoice.approval_adm_campanha_by_name || "—"
+                  invoice.approved_by_adm_campanha_name || "—"
                 }
-                at={invoice.approval_adm_campanha_at}
+                at={invoice.approved_by_adm_campanha_at}
                 lang={lang}
               />
             )}
-            {invoice.approval_admin_at && (
+            {invoice.approved_by_admin_at && (
               <ApprovalLine
                 icon={CheckCircle2}
                 label={t.approvedAdminBy}
-                name={invoice.approval_admin_by_name || "—"}
-                at={invoice.approval_admin_at}
+                name={invoice.approved_by_admin_name || "—"}
+                at={invoice.approved_by_admin_at}
                 lang={lang}
               />
             )}
