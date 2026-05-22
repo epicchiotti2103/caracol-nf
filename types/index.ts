@@ -55,7 +55,11 @@ export interface Invoice {
 // Response do GET /api/v1/nf/me/role
 export interface MeRoleResponse {
   role: NfRole | null;
+  // Counter antigo: NFs em_analise com assignee_id = me (semantica de "responsavel").
   pending_assigned_count?: number;
+  // Counter novo: NFs em_analise que AINDA precisam da MINHA aprovacao (papel).
+  // Backend ainda em deploy — quando ausente, frontend faz fallback no antigo.
+  pending_my_approval_count?: number;
 }
 
 export interface DashboardBucket {
@@ -92,11 +96,29 @@ export type InvoiceEventType =
   | "paid_by_designated"
   | "notes_update";
 
+// Payloads do jsonb gravados pelo backend (cada event_type tem shape diferente).
+// Mantemos `any` pra fallback robusto, e tipamos os shapes conhecidos.
+export type InvoiceEventValue =
+  | null
+  | {
+      status?: InvoiceStatus | string | null;
+      reason?: string | null;
+      slot?: ApprovalSlot | string | null;
+      actor_id?: string | null;
+      assignee_id?: string | null;
+      paid_by_assignee_id?: string | null;
+      [k: string]: any;
+    };
+
 export interface InvoiceEvent {
   id?: string;
   event_type: InvoiceEventType;
-  from_value?: string | null;
-  to_value?: string | null;
+  from_value?: InvoiceEventValue;
+  to_value?: InvoiceEventValue;
+  // Backend pode enriquecer com os nomes resolvidos via batch lookup (deploy futuro).
+  // Frontend tem fallback gracioso quando esses campos nao vierem.
+  from_name?: string | null;
+  to_name?: string | null;
   actor?: { id?: string | null; name?: string | null } | null;
   created_at: string;
 }

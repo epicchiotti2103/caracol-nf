@@ -126,15 +126,24 @@ function HomeContent() {
       const matchStatus = statusFilter === "todos" || inv.status === statusFilter;
       const q = search.trim().toLowerCase();
       const matchSearch = !q || inv.invoice_number.toLowerCase().includes(q);
-      const matchMine =
-        !mineOnly ||
-        (!!user?.id &&
-          inv.assignee_id === user.id &&
-          inv.status === "em_analise");
+      // mineOnly agora = "NFs em_analise onde MEU papel ainda precisa aprovar"
+      // (alinhado com `pending_my_approval_count` do banner). Bug 3.
+      let matchMine = true;
+      if (mineOnly) {
+        if (!user?.id || inv.status !== "em_analise") {
+          matchMine = false;
+        } else if (role === "adm_campanha") {
+          matchMine = !inv.approval_adm_campanha_by && !inv.approval_adm_campanha_at;
+        } else if (role === "admin") {
+          matchMine = !inv.approval_admin_by && !inv.approval_admin_at;
+        } else {
+          matchMine = false;
+        }
+      }
       const matchOverdue = !overdueOnly || !!inv.is_vencida;
       return matchStatus && matchSearch && matchMine && matchOverdue;
     });
-  }, [invoices, search, statusFilter, mineOnly, overdueOnly, user?.id]);
+  }, [invoices, search, statusFilter, mineOnly, overdueOnly, user?.id, role]);
 
   const titlePt = role === "admin" ? "Painel admin" : "Notas fiscais";
   const subtitlePt =
@@ -218,7 +227,7 @@ function HomeContent() {
           <div className="min-w-0 flex-1">
             {mineOnly ? (
               <p className="text-sm font-medium text-foreground">
-                Filtrando suas NFs ·{" "}
+                Filtrando NFs aguardando sua aprovacao ·{" "}
                 <span className="font-semibold text-primary">
                   {pendingAssignedCount}
                 </span>
@@ -230,13 +239,13 @@ function HomeContent() {
                   {pendingAssignedCount}{" "}
                   {pendingAssignedCount === 1 ? "NF" : "NFs"}
                 </span>{" "}
-                aguardando voce
+                aguardando sua aprovacao
               </p>
             )}
             <p className="mt-0.5 text-xs text-muted">
               {mineOnly
                 ? "Clique pra remover o filtro"
-                : "Clique pra ver so as suas"}
+                : "Clique pra ver so essas"}
             </p>
           </div>
           {mineOnly ? (

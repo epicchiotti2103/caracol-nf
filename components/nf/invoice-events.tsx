@@ -11,7 +11,7 @@ import {
   Wallet
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import type { InvoiceEvent, InvoiceEventType } from "@/types";
+import type { InvoiceEvent, InvoiceEventType, InvoiceEventValue } from "@/types";
 
 const ICONS: Record<InvoiceEventType, React.ElementType> = {
   status_change: ArrowRightLeft,
@@ -117,26 +117,55 @@ export function InvoiceEvents({ invoiceId }: { invoiceId: string }) {
   );
 }
 
+/**
+ * Renderiza um evento como string legivel.
+ *
+ * O backend grava `from_value`/`to_value` como JSONB com shape variavel por
+ * event_type (ver inbox/nf.md slug `nf-approval-bugs`):
+ *
+ *   approval_added       to = { slot, actor_id }
+ *   status_change        from/to = { status, reason? }
+ *   paid_by_designated   to = { paid_by_assignee_id }
+ *   assignee_change      from/to = { assignee_id }
+ *
+ * Backend ESTA SENDO ATUALIZADO em paralelo pra adicionar `from_name`/`to_name`
+ * (nomes resolvidos via batch lookup). Enquanto o deploy nao acontece, este
+ * helper faz fallback gracioso pra UUID truncado (em vez de quebrar com
+ * `[object Object]`).
+ */
 function describeEvent(ev: InvoiceEvent): string {
   const actorName = ev.actor?.name || "—";
+  const from = (ev.from_value || {}) as Record<string, any>;
+  const to = (ev.to_value || {}) as Record<string, any>;
+
   switch (ev.event_type) {
-    case "status_change":
-      return `Status mudou de ${humanStatus(ev.from_value)} para ${humanStatus(
-        ev.to_value
-      )} (${actorName})`;
-    case "assignee_change":
-      return `${actorName} alterou responsavel: ${ev.from_value || "—"} → ${
-        ev.to_value || "—"
-      }`;
+    case "status_change": {
+      const fromStatus = humanStatus(from.status);
+      const toStatus = humanStatus(to.status);
+      const reason = to.reason ? ` — motivo: ${to.reason}` : "";
+      return `${actorName} mudou status de ${fromStatus} para ${toStatus}${reason}`;
+    }
+    case "assignee_change": {
+      const fromName = resolveName(ev.from_name, from.assignee_id);
+      const toName = resolveName(ev.to_name, to.assignee_id);
+      if (!from.assignee_id && to.assignee_id) {
+        return `${actorName} atribuiu para ${toName}`;
+      }
+      if (from.assignee_id && !to.assignee_id) {
+        return `${actorName} removeu o responsavel (era ${fromName})`;
+      }
+      return `${actorName} alterou responsavel: ${fromName} → ${toName}`;
+    }
     case "approval_added":
-      return `${actorName} aprovou${
-        ev.to_value ? ` (${humanSlot(ev.to_value)})` : ""
-      }`;
-    case "paid_by_designated":
-      return `${actorName} designou pagador: ${ev.to_value || "—"}`;
+      return `${actorName} aprovou (${humanSlot(to.slot)})`;
+    case "paid_by_designated": {
+      const payerName = resolveName(ev.to_name, to.paid_by_assignee_id);
+      return `${actorName} designou pagador: ${payerName}`;
+    }
     case "notes_update":
       return `${actorName} atualizou notas`;
     default:
+      // fallback de debug — nao quebra UI
       return `${actorName} (${ev.event_type})`;
   }
 }
@@ -160,6 +189,16 @@ function humanSlot(s?: string | null): string {
   if (s === "adm_campanha") return "adm. campanha";
   if (s === "admin") return "admin";
   return s || "—";
+}
+
+/**
+ * Prefere nome enriquecido pelo backend (`from_name`/`to_name`).
+ * Fallback: UUID truncado (8 chars) ou "—" quando nao tem nada.
+ */
+function resolveName(name?: string | null, id?: string | null): string {
+  if (name && name.trim()) return name;
+  if (id && typeof id === "string") return id.slice(0, 8);
+  return "—";
 }
 
 // Tempo relativo simples em pt-BR (evita dep nova de date-fns).

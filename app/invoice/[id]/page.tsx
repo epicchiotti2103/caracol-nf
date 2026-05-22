@@ -247,25 +247,32 @@ function InvoiceDetail({ id }: { id: string }) {
   };
 
   // Derivacoes
-  const admApproved = !!invoice?.approval_adm_campanha_at;
-  const adminApproved = !!invoice?.approval_admin_at;
+  // Considera "ja aprovou" se qualquer um dos campos vier do backend (_at OU _by).
+  // Algumas respostas (POST /approve) podem nao popular ambos imediatamente.
+  const admApproved =
+    !!invoice?.approval_adm_campanha_at || !!invoice?.approval_adm_campanha_by;
+  const adminApproved =
+    !!invoice?.approval_admin_at || !!invoice?.approval_admin_by;
   const isEmAnalise = invoice?.status === "em_analise";
   const isAprovada = invoice?.status === "aprovada";
 
   // Quem ja aprovou (consulta papel do user atual)
   const youApprovedAsAdm =
     !!user?.id &&
-    invoice?.approval_adm_campanha_by &&
+    !!invoice?.approval_adm_campanha_by &&
     invoice.approval_adm_campanha_by === user.id;
   const youApprovedAsAdmin =
     !!user?.id &&
-    invoice?.approval_admin_by &&
+    !!invoice?.approval_admin_by &&
     invoice.approval_admin_by === user.id;
 
+  // So mostra botao "Aprovar" se: status em_analise + meu papel + EU ainda nao aprovei.
+  // (Bug 1: antes checava so `!admApproved`, mas mesmo com `_at` setado a UI
+  // permanecia mostrando o botao em alguns casos. Agora dupla-checa por `youApproved`.)
   const canApproveAsAdm =
-    role === "adm_campanha" && isEmAnalise && !admApproved;
+    role === "adm_campanha" && isEmAnalise && !admApproved && !youApprovedAsAdm;
   const canApproveAsAdmin =
-    role === "admin" && isEmAnalise && !adminApproved;
+    role === "admin" && isEmAnalise && !adminApproved && !youApprovedAsAdmin;
   const canReject =
     (role === "admin" || role === "adm_campanha") && isEmAnalise;
   const canPay = role === "admin" && isAprovada;

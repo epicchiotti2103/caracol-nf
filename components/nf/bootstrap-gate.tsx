@@ -115,7 +115,11 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // Step 2: papel intra-NF + contagem de NFs aguardando o user
+        // Step 2: papel intra-NF + contagem de NFs aguardando MINHA aprovacao
+        // Bug 3: trocamos a fonte do banner pra `pending_my_approval_count`
+        // (semantica "NFs em_analise onde meu papel ainda precisa aprovar").
+        // Fallback no antigo `pending_assigned_count` enquanto o backend nao
+        // deployar o novo campo.
         let role: NfRole | null;
         let pendingAssignedCount = 0;
         if (roleCache && roleCache.userId === user.id) {
@@ -124,7 +128,11 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
         } else {
           const res: MeRoleResponse = await apiFetch("/nf/me/role");
           role = res?.role ?? null;
-          pendingAssignedCount = Math.max(0, Number(res?.pending_assigned_count) || 0);
+          const pendingMy =
+            res?.pending_my_approval_count != null
+              ? Number(res.pending_my_approval_count)
+              : Number(res?.pending_assigned_count) || 0;
+          pendingAssignedCount = Math.max(0, pendingMy || 0);
           roleCache = { userId: user.id, role, pendingAssignedCount };
         }
         if (cancelled) return;
