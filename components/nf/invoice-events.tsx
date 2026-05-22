@@ -176,8 +176,13 @@ function describeEvent(ev: InvoiceEvent): string {
       const payerName = resolveName(ev.to_name, to.paid_by_assignee_id);
       return `${actorName} designou pagador: ${payerName}`;
     }
-    case "notes_update":
-      return `${actorName} atualizou notas`;
+    case "notes_update": {
+      // Backend grava {field: 'supplier'|'internal', text: <novo>}
+      const field = to.field === "internal" ? "interna" : "fornecedor";
+      const text = (to.text ?? "").toString().trim();
+      if (!text) return `${actorName} limpou nota ${field}`;
+      return `${actorName} atualizou nota ${field}:\n${text}`;
+    }
     default:
       // fallback de debug — nao quebra UI
       return `${actorName} (${ev.event_type})`;
