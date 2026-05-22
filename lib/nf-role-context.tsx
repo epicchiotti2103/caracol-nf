@@ -44,8 +44,10 @@ export function usePendingAssignedCount(): number {
 }
 
 /**
- * Helper: lang derivado do papel. Publisher ve UI em ingles, adm/admin em portugues.
+ * Helper: lang da UI. Hoje publisher e adm/admin sao todos brasileiros,
+ * entao retorna sempre pt. Tipo "en" mantido pra futuro caso volte a
+ * ter publishers internacionais.
  */
-export function langForRole(role: NfRole): "pt" | "en" {
-  return role === "publisher" ? "en" : "pt";
+export function langForRole(_role: NfRole): "pt" | "en" {
+  return "pt";
 }
