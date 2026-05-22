@@ -314,18 +314,13 @@ function NewInvoiceForm() {
               {labels.amount} <span className="text-primary">*</span>
             </label>
             <div className="flex gap-2">
-              <div className="flex flex-1 items-center rounded-lg border border-border bg-surface px-3.5 transition-colors focus-within:border-primary/60">
-                <span className="pr-2 text-sm font-medium text-muted">
-                  {moeda === "USD" ? "US$" : "R$"}
-                </span>
-                <input
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  inputMode="decimal"
-                  placeholder="0,00"
-                  className="min-w-0 flex-1 bg-transparent py-2.5 text-sm text-foreground outline-none"
-                />
-              </div>
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                inputMode="decimal"
+                placeholder="0,00"
+                className={inputCls + " flex-1"}
+              />
               <select
                 value={moeda}
                 onChange={(e) => setMoeda(e.target.value as "BRL" | "USD")}
