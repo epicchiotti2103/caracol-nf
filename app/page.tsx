@@ -262,18 +262,20 @@ function HomeContent() {
             icon={Clock}
             label="Em analise"
             value={String(summary.pending_review?.count ?? 0)}
-            sub={`${fmtCurrency(summary.pending_review?.total_amount || 0, "pt")} em valor`}
+            sub={`${fmtCurrency(summary.pending_review?.total_amount || 0, "BRL", "pt")} em valor`}
           />
-          <StatCard
+          <DualCurrencyStatCard
             icon={DollarSign}
             label="A pagar"
-            value={fmtCurrency(summary.to_pay?.total_amount || 0, "pt")}
+            brl={summary.to_pay_brl ?? summary.to_pay?.total_amount ?? 0}
+            usd={summary.to_pay_usd ?? 0}
             sub={`${summary.to_pay?.count ?? 0} aprovadas pendentes`}
           />
-          <StatCard
+          <DualCurrencyStatCard
             icon={CheckCircle}
             label="Pagas (30d)"
-            value={fmtCurrency(summary.paid_last_30d?.total_amount || 0, "pt")}
+            brl={summary.paid_last_30d_brl ?? summary.paid_last_30d?.total_amount ?? 0}
+            usd={summary.paid_last_30d_usd ?? 0}
             sub={`${summary.paid_last_30d?.count ?? 0} ultimos 30 dias`}
           />
         </div>
@@ -391,13 +393,30 @@ function HomeContent() {
                 ? "invoice"
                 : "invoices"}
             </p>
-            <p className="text-xs font-medium text-foreground">
-              {lang === "pt" ? "Total" : "Total"}:{" "}
-              {fmtCurrency(
-                filtered.reduce((s, i) => s + (i.amount || 0), 0),
-                lang
-              )}
-            </p>
+            <div className="flex flex-col items-end gap-0.5 text-xs font-medium text-foreground">
+              {(() => {
+                const totalBrl = filtered
+                  .filter((i) => (i.moeda || "BRL") === "BRL")
+                  .reduce((s, i) => s + (i.amount || 0), 0);
+                const totalUsd = filtered
+                  .filter((i) => i.moeda === "USD")
+                  .reduce((s, i) => s + (i.amount || 0), 0);
+                const showUsd = totalUsd > 0;
+                return (
+                  <>
+                    <p>
+                      {lang === "pt" ? "Total" : "Total"}:{" "}
+                      {fmtCurrency(totalBrl, "BRL", lang)}
+                    </p>
+                    {showUsd && (
+                      <p className="text-muted">
+                        {fmtCurrency(totalUsd, "USD", lang)}
+                      </p>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
           </div>
         )}
       </div>
@@ -467,7 +486,7 @@ function InvoiceRow({
         {invoice.invoice_number}
       </td>
       <td className="whitespace-nowrap px-5 py-4 font-medium text-foreground">
-        {fmtCurrency(invoice.amount || 0, lang)}
+        {fmtCurrency(invoice.amount || 0, invoice.moeda || "BRL", lang)}
       </td>
       <td className="whitespace-nowrap px-5 py-4">
         <div className="flex flex-col gap-1">
@@ -545,6 +564,39 @@ function StatCard({
       <div className="min-w-0">
         <p className="mb-0.5 text-xs font-medium text-muted">{label}</p>
         <p className="text-xl font-semibold text-foreground">{value}</p>
+        {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
+      </div>
+    </div>
+  );
+}
+
+// Variante que mostra BRL + USD em 2 linhas, conforme spec do nf-moeda-ui.
+function DualCurrencyStatCard({
+  icon: Icon,
+  label,
+  brl,
+  usd,
+  sub
+}: {
+  icon: React.ElementType;
+  label: string;
+  brl: number;
+  usd: number;
+  sub?: string;
+}) {
+  return (
+    <div className="flex items-start gap-4 rounded-xl border border-border bg-surface p-5">
+      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10">
+        <Icon className="h-4 w-4 text-primary" />
+      </div>
+      <div className="min-w-0">
+        <p className="mb-0.5 text-xs font-medium text-muted">{label}</p>
+        <p className="text-lg font-semibold leading-tight text-foreground">
+          {fmtCurrency(brl, "BRL", "pt")}
+        </p>
+        <p className="text-sm font-medium leading-tight text-foreground/80">
+          {fmtCurrency(usd, "USD", "pt")}
+        </p>
         {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
       </div>
     </div>

@@ -38,6 +38,7 @@ function NewInvoiceForm() {
 
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [amount, setAmount] = useState("");
+  const [moeda, setMoeda] = useState<"BRL" | "USD">("BRL");
   const [dueDate, setDueDate] = useState("");
   const [refMonth, setRefMonth] = useState(""); // YYYY-MM
   const [campaign, setCampaign] = useState("");
@@ -90,6 +91,7 @@ function NewInvoiceForm() {
     dueDate: lang === "pt" ? "Vencimento" : "Due date",
     refMonth: lang === "pt" ? "Mes de referencia" : "Reference month",
     campaign: lang === "pt" ? "Campanha" : "Campaign",
+    moedaLabel: lang === "pt" ? "Moeda" : "Currency",
     pdfFile: lang === "pt" ? "Arquivo PDF" : "PDF file",
     submit: lang === "pt" ? "Enviar NF" : "Send invoice",
     sending: lang === "pt" ? "Enviando..." : "Sending...",
@@ -163,6 +165,7 @@ function NewInvoiceForm() {
       const fd = new FormData();
       fd.append("invoice_number", invoiceNumber.trim());
       fd.append("amount", String(parseFloat(amount.replace(",", "."))));
+      fd.append("moeda", moeda);
       fd.append("due_date", dueDate);
       // refMonth pode chegar como YYYY-MM; backend espera ISO de primeiro dia do mes
       const refIso = refMonth.length === 7 ? `${refMonth}-01` : refMonth;
@@ -202,6 +205,7 @@ function NewInvoiceForm() {
               setCampaign("");
               setPdf(null);
               setPublisherId("");
+              setMoeda("BRL");
             }}
             className="rounded-lg border border-border px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-surface"
           >
@@ -309,17 +313,28 @@ function NewInvoiceForm() {
             <label className="mb-1.5 block text-sm font-medium text-foreground">
               {labels.amount} <span className="text-primary">*</span>
             </label>
-            <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
-                {lang === "pt" ? "R$" : "BRL"}
-              </span>
-              <input
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                inputMode="decimal"
-                placeholder="0,00"
-                className={inputCls + " pl-12"}
-              />
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-sm font-medium text-muted">
+                  {moeda === "USD" ? "US$" : "R$"}
+                </span>
+                <input
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  className={inputCls + " pl-12"}
+                />
+              </div>
+              <select
+                value={moeda}
+                onChange={(e) => setMoeda(e.target.value as "BRL" | "USD")}
+                aria-label={labels.moedaLabel}
+                className={inputCls + " w-28 flex-shrink-0"}
+              >
+                <option value="BRL">R$ (BRL)</option>
+                <option value="USD">US$ (USD)</option>
+              </select>
             </div>
           </div>
           <div>

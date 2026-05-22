@@ -449,7 +449,11 @@ function InvoiceDetail({ id }: { id: string }) {
         )}
 
       <div className="space-y-4 rounded-xl border border-border bg-surface p-6">
-        <Row label={t.amount} value={fmtCurrency(invoice.amount || 0, lang)} bold />
+        <Row
+          label={t.amount}
+          value={fmtCurrency(invoice.amount || 0, invoice.moeda || "BRL", lang)}
+          bold
+        />
         <Row label={t.dueDate} value={fmtDate(invoice.due_date, lang)} />
         <Row label={t.refMonth} value={fmtRefMonth(invoice.reference_month, lang)} />
         <Row label={t.campaign} value={invoice.campaign || "—"} />

@@ -48,11 +48,35 @@ export function tr(key: keyof typeof i18n, lang: Lang): string {
   return i18n[key][lang];
 }
 
-export function fmtCurrency(v: number, lang: Lang): string {
-  if (lang === "en") {
-    return v.toLocaleString("en-US", { style: "currency", currency: "BRL" });
+// Tipo permissivo aceita string vinda do backend (graceful degradation).
+type CurrencyCode = "BRL" | "USD" | string | null | undefined;
+
+function normalizeMoeda(m: CurrencyCode): "BRL" | "USD" {
+  const v = (m || "BRL").toString().toUpperCase();
+  return v === "USD" ? "USD" : "BRL";
+}
+
+// Aceita assinatura legada (v, lang) e nova (v, moeda, lang?).
+// Default de moeda = BRL pra graceful degradation em NFs antigas.
+export function fmtCurrency(
+  v: number,
+  moedaOrLang?: CurrencyCode | Lang,
+  lang?: Lang
+): string {
+  // Heuristica: se segundo arg for 'pt'|'en', assina legada.
+  let resolvedMoeda: "BRL" | "USD" = "BRL";
+  let resolvedLang: Lang = "pt";
+  if (moedaOrLang === "pt" || moedaOrLang === "en") {
+    resolvedLang = moedaOrLang;
+  } else {
+    resolvedMoeda = normalizeMoeda(moedaOrLang as CurrencyCode);
+    if (lang) resolvedLang = lang;
   }
-  return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const locale = resolvedLang === "en" ? "en-US" : "pt-BR";
+  return v.toLocaleString(locale, {
+    style: "currency",
+    currency: resolvedMoeda
+  });
 }
 
 export function fmtDate(s: string | null | undefined, lang: Lang): string {

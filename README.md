@@ -19,11 +19,11 @@ CRUD de invoices funcionando, com upload de PDF, papeis intra-NF (publisher / ad
 
 - `/login` — login conectado ao Supabase Auth (via API do Tracker)
 - `/` — lista de notas fiscais (renderizacao diferente por papel; titulo, colunas e botoes adaptam)
-- `/invoice/new` — formulario de cadastro de NF com upload de PDF (form bilingual: ingles pra publisher, portugues pros outros). Admin/adm_campanha precisam selecionar o publisher num `<select>` obrigatorio (alimentado por `GET /nf/users` filtrado por `nf_role === "publisher"`); publisher cadastra direto pra si.
+- `/invoice/new` — formulario de cadastro de NF com upload de PDF (form bilingual: ingles pra publisher, portugues pros outros). Admin/adm_campanha precisam selecionar o publisher num `<select>` obrigatorio (alimentado por `GET /nf/users` filtrado por `nf_role === "publisher"`); publisher cadastra direto pra si. Campo **Moeda** (BRL/USD, default BRL) ao lado do Valor; prefix `R$` ou `US$` alterna conforme selecao.
 - `/invoice/[id]` — detalhe com auditoria das 2 aprovacoes + pagamento, badges `2/2 aprovacoes` e `Vencida ha N dias`, acoes condicionais por papel (incluindo modal de "designar pagador" quando admin completa a dupla), painel de notas e **timeline de eventos** (`GET /nf/invoices/{id}/events`)
 - `/admin/usuarios-nf` — gestao de papeis intra-NF (apenas admin)
 
-No dashboard `/`, admins e adm_campanha veem **3 chips no topo** (pendentes / a pagar / vencidas). Cada chip abre um hovercard (com fallback de clique no mobile) listando ate 5 NFs do balde + link "ver todas" que aplica o filtro.
+No dashboard `/`, admins e adm_campanha veem **3 chips no topo** (pendentes / a pagar / vencidas). Cada chip abre um hovercard (com fallback de clique no mobile) listando ate 5 NFs do balde + link "ver todas" que aplica o filtro. Admin tambem ve 3 stat cards abaixo dos chips — os de **A pagar** e **Pagas (30d)** mostram total em **R$** e **US$** em duas linhas (`to_pay_brl`/`to_pay_usd`, `paid_last_30d_brl`/`paid_last_30d_usd`).
 
 A logo Caracol no header e clicavel e volta pro Hub.
 

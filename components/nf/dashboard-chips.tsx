@@ -189,7 +189,7 @@ function ChipContent({
                   NF {it.invoice_number ? `#${it.invoice_number}` : "—"}
                 </span>
                 <span className="text-foreground/80">
-                  {fmtCurrency(it.valor || 0, "pt")}
+                  {fmtCurrency(it.valor || 0, it.moeda || "BRL", "pt")}
                 </span>
               </div>
               <p className="mt-0.5 truncate text-[11px] text-muted">

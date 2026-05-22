@@ -9,10 +9,15 @@ export type InvoiceStatus = "em_analise" | "aprovada" | "paga" | "recusada";
 // Quem ainda falta aprovar (vem em GET /nf/invoices). Vazio quando ja aprovada.
 export type ApprovalSlot = "adm_campanha" | "admin";
 
+// Moeda da NF. Backend ainda em deploy — frontend trata `undefined` como BRL
+// (graceful degradation pra NFs antigas).
+export type Moeda = "BRL" | "USD";
+
 export interface Invoice {
   id: string;
   invoice_number: string;
   amount: number;
+  moeda?: Moeda | string | null;  // default 'BRL' quando ausente
   due_date: string;        // YYYY-MM-DD
   reference_month: string; // YYYY-MM ou YYYY-MM-01
   campaign: string;
@@ -75,6 +80,14 @@ export interface DashboardSummary {
   pending_approvals_count?: number;
   to_pay_count?: number;
   overdue_count?: number;
+  // Totais por moeda (backend ainda em deploy — opcionais por enquanto).
+  // Campos legados acima (to_pay.total_amount etc) passam a representar so BRL.
+  to_pay_brl?: number;
+  to_pay_usd?: number;
+  overdue_brl?: number;
+  overdue_usd?: number;
+  paid_last_30d_brl?: number;
+  paid_last_30d_usd?: number;
 }
 
 // Itens compactos retornados pelas listas do hovercard de chips
@@ -83,6 +96,7 @@ export interface DashboardChipItem {
   invoice_number?: string;
   fornecedor?: string | null;
   valor?: number | null;
+  moeda?: Moeda | string | null;   // BRL default quando ausente
   aguarda?: ApprovalSlot[];        // pendentes
   pagador?: string | null;         // a pagar (nome ou null)
   dias_atraso?: number | null;     // vencidas
