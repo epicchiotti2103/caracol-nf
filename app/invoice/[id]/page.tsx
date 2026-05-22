@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   Download,
   Loader2,
+  Pencil,
   User as UserIcon,
   Wallet,
   X
@@ -16,6 +17,7 @@ import { AppShell } from "@/components/app-shell";
 import { StatusBadge } from "@/components/status-badge";
 import { ApprovalBadge, OverdueBadge } from "@/components/nf/approval-badge";
 import { InvoiceEvents } from "@/components/nf/invoice-events";
+import { InvoiceEditModal } from "@/components/nf/invoice-edit-modal";
 import { useAuth } from "@/lib/auth-context";
 import { useNfRole, langForRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
@@ -62,6 +64,9 @@ function InvoiceDetail({ id }: { id: string }) {
   const [notesSupplier, setNotesSupplier] = useState("");
   const [notesInternal, setNotesInternal] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
+
+  // Modal de edicao da NF (admin/adm_campanha em em_analise)
+  const [editOpen, setEditOpen] = useState(false);
 
   // Reatribuicao de responsavel
   const [assignOpen, setAssignOpen] = useState(false);
@@ -455,6 +460,18 @@ function InvoiceDetail({ id }: { id: string }) {
           <h1 className="text-2xl font-semibold text-foreground">{invoice.invoice_number}</h1>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {/* Botao Editar — so admin/adm_campanha + em_analise */}
+          {(role === "admin" || role === "adm_campanha") &&
+            invoice.status === "em_analise" && (
+              <button
+                onClick={() => setEditOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface"
+                title="Editar dados da NF"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                Editar
+              </button>
+            )}
           <StatusBadge status={invoice.status} lang={lang} />
           {(invoice.status === "em_analise" ||
             invoice.status === "aprovada" ||
@@ -513,7 +530,10 @@ function InvoiceDetail({ id }: { id: string }) {
         />
         <Row label={t.dueDate} value={fmtDate(invoice.due_date, lang)} />
         <Row label={t.refMonth} value={fmtRefMonth(invoice.reference_month, lang)} />
-        <Row label={t.campaign} value={invoice.campaign || "—"} />
+        <Row
+          label={t.campaign}
+          value={invoice.campaign_name ?? invoice.campaign ?? "—"}
+        />
         {role !== "publisher" && (
           <Row
             label={t.publisher}
@@ -670,6 +690,21 @@ function InvoiceDetail({ id }: { id: string }) {
           onSelect={setSelectedAssignee}
           onCancel={() => setAssignOpen(false)}
           onConfirm={saveAssignee}
+        />
+      )}
+
+      {editOpen && invoice && (role === "admin" || role === "adm_campanha") && (
+        <InvoiceEditModal
+          invoice={invoice}
+          onClose={() => setEditOpen(false)}
+          onSaved={(updated) => {
+            setInvoice(updated);
+            setNotesSupplier(updated.notes_supplier || "");
+            setNotesInternal(updated.notes_internal || "");
+            setEditOpen(false);
+            toast.success("NF atualizada");
+            setEventsRefreshKey((k) => k + 1);
+          }}
         />
       )}
     </div>

@@ -20,7 +20,10 @@ export interface Invoice {
   moeda?: Moeda | string | null;  // default 'BRL' quando ausente
   due_date: string;        // YYYY-MM-DD
   reference_month: string; // YYYY-MM ou YYYY-MM-01
-  campaign: string;
+  // Backend grava como `campaign_name`. Mantemos `campaign` legado pra
+  // compat de render historico (algumas telas leem .campaign).
+  campaign?: string | null;
+  campaign_name?: string | null;
   status: InvoiceStatus;
   pdf_path?: string | null;
   notes_supplier?: string | null;
@@ -111,7 +114,8 @@ export type InvoiceEventType =
   | "assignee_change"
   | "approval_added"
   | "paid_by_designated"
-  | "notes_update";
+  | "notes_update"
+  | "invoice_edited";
 
 // Payloads do jsonb gravados pelo backend (cada event_type tem shape diferente).
 // Mantemos `any` pra fallback robusto, e tipamos os shapes conhecidos.

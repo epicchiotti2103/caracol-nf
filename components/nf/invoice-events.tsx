@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
+  Pencil,
   RefreshCw,
   UserCog,
   Wallet
@@ -18,7 +19,8 @@ const ICONS: Record<InvoiceEventType, React.ElementType> = {
   assignee_change: UserCog,
   approval_added: CheckCircle2,
   paid_by_designated: Wallet,
-  notes_update: RefreshCw
+  notes_update: RefreshCw,
+  invoice_edited: Pencil
 };
 
 const COLORS: Record<InvoiceEventType, string> = {
@@ -26,7 +28,8 @@ const COLORS: Record<InvoiceEventType, string> = {
   assignee_change: "text-amber-300",
   approval_added: "text-emerald-300",
   paid_by_designated: "text-primary",
-  notes_update: "text-muted"
+  notes_update: "text-muted",
+  invoice_edited: "text-cyan-300"
 };
 
 export function InvoiceEvents({ invoiceId }: { invoiceId: string }) {
@@ -102,7 +105,7 @@ export function InvoiceEvents({ invoiceId }: { invoiceId: string }) {
                 >
                   <Icon className="h-3 w-3" />
                 </span>
-                <p className="text-sm text-foreground">
+                <p className="whitespace-pre-line text-sm text-foreground">
                   {describeEvent(ev)}
                 </p>
                 <p className="mt-0.5 text-[11px] text-muted">
@@ -183,6 +186,18 @@ function describeEvent(ev: InvoiceEvent): string {
       if (!text) return `${actorName} limpou nota ${field}`;
       return `${actorName} atualizou nota ${field}:\n${text}`;
     }
+    case "invoice_edited": {
+      // Backend grava from_value/to_value como dicts com **apenas os campos
+      // alterados**. Renderiza como lista "campo: novo (antes: velho)".
+      const keys = Object.keys(to || {});
+      if (keys.length === 0) return `${actorName} editou a NF`;
+      const lines = keys.map((k) => {
+        const oldFmt = formatEditedValue(k, from[k]);
+        const newFmt = formatEditedValue(k, to[k]);
+        return `${humanFieldName(k)}: ${newFmt} (antes: ${oldFmt})`;
+      });
+      return `${actorName} editou a NF\n${lines.join("\n")}`;
+    }
     default:
       // fallback de debug — nao quebra UI
       return `${actorName} (${ev.event_type})`;
@@ -208,6 +223,75 @@ function humanSlot(s?: string | null): string {
   if (s === "adm_campanha") return "adm. campanha";
   if (s === "admin") return "admin";
   return s || "—";
+}
+
+/** Nomes humanos pros campos editaveis da NF (usado no evento invoice_edited). */
+function humanFieldName(k: string): string {
+  switch (k) {
+    case "invoice_number":
+      return "Numero da NF";
+    case "amount":
+      return "Valor";
+    case "moeda":
+      return "Moeda";
+    case "due_date":
+      return "Vencimento";
+    case "reference_month":
+      return "Mes de referencia";
+    case "campaign_name":
+      return "Campanha";
+    case "publisher_id":
+      return "Publisher";
+    default:
+      return k;
+  }
+}
+
+/**
+ * Formata o valor de um campo editado pra exibicao na timeline.
+ *
+ * `amount` e date-like vem do backend como string (jsonb), entao normaliza
+ * antes de exibir. `publisher_id` e UUID — backend ainda nao enriquece com
+ * nome, exibe truncado.
+ */
+function formatEditedValue(field: string, value: any): string {
+  if (value === null || value === undefined || value === "") return "—";
+  const s = String(value);
+  if (field === "amount") {
+    const n = Number(s);
+    if (!isNaN(n)) {
+      return new Intl.NumberFormat("pt-BR", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      }).format(n);
+    }
+    return s;
+  }
+  if (field === "due_date") {
+    // YYYY-MM-DD
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+    return s;
+  }
+  if (field === "reference_month") {
+    // YYYY-MM-DD (primeiro dia do mes) ou YYYY-MM
+    const m = s.match(/^(\d{4})-(\d{2})/);
+    if (m) {
+      const d = new Date(Number(m[1]), Number(m[2]) - 1, 1);
+      const txt = new Intl.DateTimeFormat("pt-BR", {
+        month: "long",
+        year: "numeric"
+      }).format(d);
+      return txt.charAt(0).toUpperCase() + txt.slice(1);
+    }
+    return s;
+  }
+  if (field === "publisher_id") {
+    // UUID — backend ainda nao envia nome (TODO: enriquecer events com
+    // resolucao de publisher tipo from_name/to_name).
+    return s.slice(0, 8);
+  }
+  return s;
 }
 
 /**
