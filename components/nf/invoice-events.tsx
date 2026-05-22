@@ -92,7 +92,7 @@ export function InvoiceEvents({ invoiceId }: { invoiceId: string }) {
       {events && events.length > 0 && (
         <ol className="relative space-y-3 pl-5">
           <span className="absolute bottom-1 left-[7px] top-1 w-px bg-border" />
-          {events.map((ev, i) => {
+          {events.filter((ev) => !isNoopEvent(ev)).map((ev, i) => {
             const Icon = ICONS[ev.event_type] || Clock;
             const colorClass = COLORS[ev.event_type] || "text-muted";
             return (
@@ -133,6 +133,20 @@ export function InvoiceEvents({ invoiceId }: { invoiceId: string }) {
  * helper faz fallback gracioso pra UUID truncado (em vez de quebrar com
  * `[object Object]`).
  */
+/**
+ * Eventos que sao no-op (ex: assignee_change com from===to) devem ser
+ * escondidos da timeline pra nao poluir. Backend tem guard preventivo
+ * tambem mas registros antigos podem ter ruido.
+ */
+function isNoopEvent(ev: InvoiceEvent): boolean {
+  const from = (ev.from_value || {}) as Record<string, any>;
+  const to = (ev.to_value || {}) as Record<string, any>;
+  if (ev.event_type === "assignee_change") {
+    return from.assignee_id === to.assignee_id;
+  }
+  return false;
+}
+
 function describeEvent(ev: InvoiceEvent): string {
   const actorName = ev.actor?.name || "—";
   const from = (ev.from_value || {}) as Record<string, any>;

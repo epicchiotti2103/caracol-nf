@@ -586,6 +586,7 @@ function InvoiceDetail({ id }: { id: string }) {
           loading={loadingUsers}
           saving={savingAssignee}
           selected={selectedAssignee}
+          currentAssigneeId={invoice?.assignee_id || ""}
           onSelect={setSelectedAssignee}
           onCancel={() => setAssignOpen(false)}
           onConfirm={saveAssignee}
@@ -769,6 +770,7 @@ function AssignModal({
   loading,
   saving,
   selected,
+  currentAssigneeId,
   onSelect,
   onCancel,
   onConfirm
@@ -778,10 +780,12 @@ function AssignModal({
   loading: boolean;
   saving: boolean;
   selected: string;
+  currentAssigneeId: string;
   onSelect: (v: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
 }) {
+  const noChange = selected === currentAssigneeId;
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-4 sm:items-center"
@@ -827,7 +831,7 @@ function AssignModal({
             </button>
             <button
               onClick={onConfirm}
-              disabled={loading || saving}
+              disabled={loading || saving || noChange}
               className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
             >
               {saving ? (
