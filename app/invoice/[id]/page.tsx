@@ -460,10 +460,6 @@ function InvoiceDetail({ id }: { id: string }) {
           <h1 className="text-2xl font-semibold text-foreground">{invoice.invoice_number}</h1>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
-          {/* DEBUG temporario: mostra role+status pra diagnosticar bug do botao Editar */}
-          <span className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] font-mono text-amber-300">
-            DBG role={String(role)} status={String(invoice.status)}
-          </span>
           {/* Botao Editar — so admin/adm_campanha + em_analise */}
           {(role === "admin" || role === "adm_campanha") &&
             invoice.status === "em_analise" && (
