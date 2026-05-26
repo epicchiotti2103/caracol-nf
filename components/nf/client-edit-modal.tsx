@@ -130,28 +130,28 @@ export function ClientEditModal({ client, onClose, onSaved }: Props) {
                 value={taxId}
                 onChange={(e) => setTaxId(e.target.value)}
                 className={inputCls}
-                placeholder="CNPJ (BR) ou EIN (LLC)"
+                placeholder="CNPJ (Brasil) ou EIN (Exterior)"
               />
             </div>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-foreground">
-                  Entidade default
+                  Pais
                 </label>
                 <select
                   value={entity}
                   onChange={(e) => setEntity(e.target.value as ClientEntity)}
                   className={inputCls}
                 >
-                  <option value="BR">BR</option>
-                  <option value="LLC">LLC</option>
+                  <option value="BR">Brasil</option>
+                  <option value="LLC">Exterior</option>
                 </select>
               </div>
 
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-foreground">
-                  Moeda default
+                  Moeda
                 </label>
                 <select
                   value={moeda}

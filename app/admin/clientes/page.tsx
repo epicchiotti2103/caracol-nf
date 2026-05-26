@@ -211,11 +211,11 @@ function ClientesContent() {
             value={entityFilter}
             onChange={(e) => setEntityFilter(e.target.value as EntityFilter)}
             className="rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary/50"
-            aria-label="Filtrar por entidade"
+            aria-label="Filtrar por pais"
           >
-            <option value="">Todas entidades</option>
-            <option value="BR">BR</option>
-            <option value="LLC">LLC</option>
+            <option value="">Todos os paises</option>
+            <option value="BR">Brasil</option>
+            <option value="LLC">Exterior</option>
           </select>
 
           <div className="flex items-center gap-1">
@@ -249,7 +249,7 @@ function ClientesContent() {
                 {[
                   "Nome",
                   "Tax ID",
-                  "Entidade",
+                  "Pais",
                   "Moeda",
                   "Contato",
                   "Status",
@@ -288,7 +288,7 @@ function ClientesContent() {
                   >
                     <td className="px-5 py-4 font-medium text-foreground">{c.name}</td>
                     <td className="px-5 py-4 text-muted">{c.tax_id || "—"}</td>
-                    <td className="px-5 py-4 text-muted">{c.default_entity}</td>
+                    <td className="px-5 py-4 text-muted">{c.default_entity === "BR" ? "Brasil" : "Exterior"}</td>
                     <td className="px-5 py-4 text-muted">{c.default_moeda}</td>
                     <td className="px-5 py-4 text-muted">
                       {c.contact_name || c.contact_email ? (
