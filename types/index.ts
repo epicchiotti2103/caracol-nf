@@ -194,3 +194,46 @@ export interface ClientUpdatePayload {
   notes?: string | null;
   active?: boolean;
 }
+
+// NF a Receber (Receivables). Espelha `backend/app/models/nf_receivables.py`.
+// Cuidado: a moeda/entidade aqui sao independentes de `Invoice` (NF a Pagar);
+// reusam os mesmos tipos `Moeda` e `ClientEntity` por simplicidade.
+export type NfReceivableStatus = "pendente" | "recebida" | "cancelada";
+
+export interface NfReceivable {
+  id: string;
+  client_id: string;
+  invoice_number: string | null;
+  amount: number | string;        // backend serializa Decimal como string
+  moeda: Moeda;
+  caracol_entity: ClientEntity;
+  issue_date: string | null;      // YYYY-MM-DD
+  due_date: string;               // YYYY-MM-DD
+  reference_month: string;        // YYYY-MM-01 (DATE no banco)
+  has_invoice: boolean;
+  pdf_path: string | null;
+  status: NfReceivableStatus;
+  received_at: string | null;     // ISO datetime
+  received_proof_path: string | null;
+  description: string | null;
+  notes_internal: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  created_by?: string | null;
+  // derivados / join
+  client_name?: string | null;
+  is_vencida?: boolean;
+}
+
+export interface NfReceivableSummary {
+  pending_count: number;
+  pending_brl: number;
+  pending_usd: number;
+  overdue_count: number;
+  overdue_brl: number;
+  overdue_usd: number;
+  received_last_30d_count: number;
+  received_last_30d_brl: number;
+  received_last_30d_usd: number;
+  cancelled_count: number;
+}

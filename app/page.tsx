@@ -25,6 +25,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { ApprovalBadge, OverdueBadge } from "@/components/nf/approval-badge";
 import { DashboardChips } from "@/components/nf/dashboard-chips";
 import { DateRangePicker } from "@/components/nf/date-range-picker";
+import { ReceivablesView } from "@/components/nf/receivables-view";
 import { useAuth } from "@/lib/auth-context";
 import {
   useNfRole,
@@ -116,6 +117,21 @@ function HomeContent() {
   const showAssignedBanner =
     (role === "admin" || role === "adm_campanha") && pendingAssignedCount > 0;
   const showFilters = role === "admin" || role === "adm_campanha";
+
+  // Tab toggle "A Pagar / A Receber" — so admin/adm_campanha veem o toggle.
+  // Controlado por query string (?view=pagar|receber), permite link direto.
+  const canSeeReceivables = role === "admin" || role === "adm_campanha";
+  const viewParam = (searchParams?.get("view") || "pagar") as "pagar" | "receber";
+  const view: "pagar" | "receber" =
+    viewParam === "receber" && canSeeReceivables ? "receber" : "pagar";
+
+  const setView = (next: "pagar" | "receber") => {
+    const qs = new URLSearchParams(searchParams?.toString() || "");
+    if (next === "pagar") qs.delete("view");
+    else qs.set("view", "receber");
+    const s = qs.toString();
+    router.replace(`/${s ? `?${s}` : ""}`, { scroll: false });
+  };
 
   // Constroi querystring que vai pros endpoints (backend params: status,
   // due_date_start, due_date_end, reference_month, assignee_id). Apenas server-side;
@@ -264,6 +280,35 @@ function HomeContent() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      {canSeeReceivables && (
+        <div className="mb-6 flex items-center gap-1 rounded-lg border border-border bg-surface p-1 w-fit">
+          <button
+            onClick={() => setView("pagar")}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+              view === "pagar"
+                ? "bg-primary text-black"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            A Pagar
+          </button>
+          <button
+            onClick={() => setView("receber")}
+            className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+              view === "receber"
+                ? "bg-primary text-black"
+                : "text-muted hover:text-foreground"
+            }`}
+          >
+            A Receber
+          </button>
+        </div>
+      )}
+
+      {view === "receber" && canSeeReceivables ? (
+        <ReceivablesView />
+      ) : (
+      <>
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h4 className="mb-1 text-xs font-semibold uppercase tracking-widest text-primary">
@@ -657,6 +702,8 @@ function HomeContent() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
