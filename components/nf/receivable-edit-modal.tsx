@@ -187,7 +187,7 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
     }
     const origRef = (receivable.reference_month || "").slice(0, 7);
     if (refMonth && refMonth !== origRef) {
-      out.reference_month = `${refMonth}-01`;
+      out.reference_month = refMonth;
     }
     if (Boolean(hasInvoice) !== Boolean(receivable.has_invoice)) {
       out.has_invoice = hasInvoice;
@@ -230,7 +230,7 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
     }
     setSaving(true);
     try {
-      const refIso = refMonth.length === 7 ? `${refMonth}-01` : refMonth;
+      const refIso = refMonth.length === 10 ? refMonth.slice(0, 7) : refMonth;
       let saved: NfReceivable;
       if (isEdit && receivable) {
         // PATCH JSON

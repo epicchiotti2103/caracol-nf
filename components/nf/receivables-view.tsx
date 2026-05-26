@@ -292,7 +292,7 @@ export function ReceivablesView() {
               className="flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-black hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
-              Nova receivable
+              Nova NF
             </button>
           )}
         </div>
