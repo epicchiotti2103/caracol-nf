@@ -6,13 +6,14 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useNfRole, langForRole } from "@/lib/nf-role-context";
 import { HUB_URL } from "@/lib/config";
-import { FileText, LogOut, ArrowLeft, ShieldCheck, User, Users } from "lucide-react";
+import { Building2, FileText, LogOut, ArrowLeft, ShieldCheck, User, Users } from "lucide-react";
 
 type LinkDef = { href: string; label: string; icon: any; adminOnly?: boolean };
 
 const linksByLang: Record<"pt" | "en", LinkDef[]> = {
   pt: [
     { href: "/", label: "Notas", icon: FileText },
+    { href: "/admin/clientes", label: "Clientes", icon: Building2, adminOnly: true },
     { href: "/admin/usuarios-nf", label: "Usuarios", icon: Users, adminOnly: true }
   ],
   en: [{ href: "/", label: "Invoices", icon: FileText }]

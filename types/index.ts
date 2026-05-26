@@ -154,3 +154,43 @@ export interface NfUser {
   email: string;
   nf_role: NfRole | null;
 }
+
+// Cliente (entidade cadastral pura — sem login). Backend: /api/v1/clients.
+// Shape espelha `app/models/clients.py` (snake_case).
+export type ClientEntity = "BR" | "LLC";
+
+export interface Client {
+  id: string;
+  name: string;
+  tax_id: string | null;
+  default_entity: ClientEntity;
+  default_moeda: Moeda;
+  contact_name: string | null;
+  contact_email: string | null;
+  notes: string | null;
+  active: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+  created_by?: string | null;
+}
+
+export interface ClientCreatePayload {
+  name: string;
+  tax_id?: string | null;
+  default_entity?: ClientEntity;
+  default_moeda?: Moeda;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  notes?: string | null;
+}
+
+export interface ClientUpdatePayload {
+  name?: string;
+  tax_id?: string | null;
+  default_entity?: ClientEntity;
+  default_moeda?: Moeda;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  notes?: string | null;
+  active?: boolean;
+}
