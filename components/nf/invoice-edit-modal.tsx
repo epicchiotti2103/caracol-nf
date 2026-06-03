@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import type { Invoice, NfUser, Supplier } from "@/types";
+import type { Invoice, Supplier } from "@/types";
 
 const MAX_BR_DATE_LEN = 10;
 
@@ -40,7 +40,7 @@ interface Props {
  * Backend: PATCH /api/v1/nf/invoices/{id} (apenas em em_analise, admin ou
  * adm_campanha). Aceita JSON com qualquer subset de
  * {invoice_number, amount, moeda, due_date, reference_month, campaign_name,
- * publisher_id}. Grava 1 evento `invoice_edited` com o diff.
+ * supplier_id}. Grava 1 evento `invoice_edited` com o diff.
  *
  * Frontend manda **so o diff** (campos cujo valor mudou) pra evitar
  * eventos ruidosos. Backend faz double-check do diff antes de gravar.
@@ -61,18 +61,9 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
   const [dueDate, setDueDate] = useState((invoice.due_date || "").slice(0, 10));
   const [refMonth, setRefMonth] = useState(initialRef);
   const [campaign, setCampaign] = useState(initialCampaign);
-  const [publisherId, setPublisherId] = useState(invoice.publisher_id || "");
 
-  // Toggle Publisher (usuario) | Fornecedor cadastrado. Inicializa pela fonte
-  // atual da NF (se tem supplier_id, ja vem como fornecedor).
-  const [sourceKind, setSourceKind] = useState<"publisher" | "supplier">(
-    invoice.supplier_id ? "supplier" : "publisher"
-  );
+  // NF a Pagar sempre aponta pra um fornecedor cadastrado (supplier_id).
   const [supplierId, setSupplierId] = useState(invoice.supplier_id || "");
-
-  const [publishers, setPublishers] = useState<NfUser[]>([]);
-  const [loadingPublishers, setLoadingPublishers] = useState(false);
-  const [publishersError, setPublishersError] = useState("");
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
@@ -80,30 +71,6 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-
-  // Carrega publishers (precisa pro dropdown — admin/adm_campanha podem mudar)
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoadingPublishers(true);
-      setPublishersError("");
-      try {
-        const res: { items: NfUser[]; total: number } | NfUser[] =
-          await apiFetch("/nf/users");
-        const items = Array.isArray(res) ? res : res?.items || [];
-        if (cancelled) return;
-        setPublishers(items.filter((u) => u.nf_role === "publisher"));
-      } catch (err: any) {
-        if (cancelled) return;
-        setPublishersError(err?.message || "Falha ao carregar publishers");
-      } finally {
-        if (!cancelled) setLoadingPublishers(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   // Carrega fornecedores ativos pro dropdown
   useEffect(() => {
@@ -157,17 +124,9 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
     if (trimmedCampaign !== (initialCampaign || "")) {
       out.campaign_name = trimmedCampaign || null;
     }
-    // Fonte (publisher OU fornecedor). Envia somente quando muda de fato:
-    // troca de fonte, ou troca o valor dentro da mesma fonte.
-    const origKind = invoice.supplier_id ? "supplier" : "publisher";
-    if (sourceKind === "supplier") {
-      if (supplierId && (origKind !== "supplier" || supplierId !== invoice.supplier_id)) {
-        out.supplier_id = supplierId;
-      }
-    } else {
-      if (publisherId && (origKind !== "publisher" || publisherId !== invoice.publisher_id)) {
-        out.publisher_id = publisherId;
-      }
+    // Fornecedor — envia so quando muda.
+    if (supplierId && supplierId !== invoice.supplier_id) {
+      out.supplier_id = supplierId;
     }
     return out;
   }, [
@@ -177,8 +136,6 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
     dueDate,
     refMonth,
     campaign,
-    publisherId,
-    sourceKind,
     supplierId,
     invoice,
     initialCampaign,
@@ -196,11 +153,7 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
     if (!dueDate || dueDate.length !== MAX_BR_DATE_LEN)
       return "Vencimento obrigatorio";
     if (!refMonth) return "Mes de referencia obrigatorio";
-    if (sourceKind === "supplier") {
-      if (!supplierId) return "Fornecedor obrigatorio";
-    } else {
-      if (!publisherId) return "Publisher obrigatorio";
-    }
+    if (!supplierId) return "Fornecedor obrigatorio";
     return null;
   };
 
@@ -255,98 +208,35 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
 
         <div className="max-h-[70vh] overflow-y-auto p-6">
           <div className="space-y-4">
-            <div className="space-y-3">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-foreground">
-                  Vincular a <span className="text-primary">*</span>
-                </label>
-                <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1">
-                  {(
-                    [
-                      { v: "publisher", l: "Publisher (usuario)" },
-                      { v: "supplier", l: "Fornecedor cadastrado" }
-                    ] as Array<{ v: "publisher" | "supplier"; l: string }>
-                  ).map((opt) => (
-                    <button
-                      key={opt.v}
-                      type="button"
-                      onClick={() => setSourceKind(opt.v)}
-                      className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                        sourceKind === opt.v
-                          ? "bg-primary text-black"
-                          : "text-muted hover:text-foreground"
-                      }`}
-                    >
-                      {opt.l}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {sourceKind === "publisher" ? (
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-foreground">
-                    Publisher <span className="text-primary">*</span>
-                  </label>
-                  <select
-                    value={publisherId}
-                    onChange={(e) => setPublisherId(e.target.value)}
-                    disabled={loadingPublishers}
-                    className={inputCls + " disabled:opacity-60"}
-                  >
-                    {loadingPublishers && <option value="">Carregando...</option>}
-                    {!loadingPublishers && (
-                      <option value="">Selecione um publisher</option>
-                    )}
-                    {!loadingPublishers && publisherId && !publishers.find((p) => p.id === publisherId) && (
-                      // Publisher atual pode nao estar mais com nf_role=publisher;
-                      // mantem visivel pra nao perder selecao.
-                      <option value={publisherId}>
-                        {invoice.publisher_name || invoice.publisher_email || publisherId.slice(0, 8)} (atual)
-                      </option>
-                    )}
-                    {publishers.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.name ? `${u.name} (${u.email})` : u.email}
-                      </option>
-                    ))}
-                  </select>
-                  {publishersError && (
-                    <p className="mt-1 text-xs text-danger">{publishersError}</p>
-                  )}
-                </div>
-              ) : (
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-foreground">
-                    Fornecedor <span className="text-primary">*</span>
-                  </label>
-                  <select
-                    value={supplierId}
-                    onChange={(e) => setSupplierId(e.target.value)}
-                    disabled={loadingSuppliers}
-                    className={inputCls + " disabled:opacity-60"}
-                  >
-                    {loadingSuppliers && <option value="">Carregando...</option>}
-                    {!loadingSuppliers && (
-                      <option value="">Selecione um fornecedor</option>
-                    )}
-                    {!loadingSuppliers && supplierId && !suppliers.find((s) => s.id === supplierId) && (
-                      // Fornecedor atual pode estar inativo (fora da lista active=true);
-                      // mantem visivel pra nao perder selecao.
-                      <option value={supplierId}>
-                        {invoice.supplier_name || supplierId.slice(0, 8)} (atual)
-                      </option>
-                    )}
-                    {suppliers.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.tax_id ? `${s.name} (${s.tax_id})` : s.name}
-                      </option>
-                    ))}
-                  </select>
-                  {suppliersError && (
-                    <p className="mt-1 text-xs text-danger">{suppliersError}</p>
-                  )}
-                </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                Fornecedor <span className="text-primary">*</span>
+              </label>
+              <select
+                value={supplierId}
+                onChange={(e) => setSupplierId(e.target.value)}
+                disabled={loadingSuppliers}
+                className={inputCls + " disabled:opacity-60"}
+              >
+                {loadingSuppliers && <option value="">Carregando...</option>}
+                {!loadingSuppliers && (
+                  <option value="">Selecione um fornecedor</option>
+                )}
+                {!loadingSuppliers && supplierId && !suppliers.find((s) => s.id === supplierId) && (
+                  // Fornecedor atual pode estar inativo (fora da lista active=true);
+                  // mantem visivel pra nao perder selecao.
+                  <option value={supplierId}>
+                    {invoice.supplier_name || supplierId.slice(0, 8)} (atual)
+                  </option>
+                )}
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.tax_id ? `${s.name} (${s.tax_id})` : s.name}
+                  </option>
+                ))}
+              </select>
+              {suppliersError && (
+                <p className="mt-1 text-xs text-danger">{suppliersError}</p>
               )}
             </div>
 

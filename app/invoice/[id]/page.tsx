@@ -88,7 +88,7 @@ function InvoiceDetail({ id }: { id: string }) {
     dueDate: lang === "pt" ? "Vencimento" : "Due date",
     refMonth: lang === "pt" ? "Mes de referencia" : "Reference month",
     campaign: lang === "pt" ? "Campanha" : "Campaign",
-    publisher: "Publisher",
+    publisher: lang === "pt" ? "Fornecedor" : "Supplier",
     submittedBy: lang === "pt" ? "Cadastrado por" : "Submitted by",
     createdAt: lang === "pt" ? "Enviada em" : "Sent at",
     downloadPdf: lang === "pt" ? "Baixar PDF" : "Download PDF",
@@ -563,11 +563,10 @@ function InvoiceDetail({ id }: { id: string }) {
           <Row
             label={t.publisher}
             value={
-              invoice.publisher_name
-                ? `${invoice.publisher_name}${
-                    invoice.publisher_email ? ` (${invoice.publisher_email})` : ""
-                  }`
-                : invoice.publisher_email || invoice.supplier_name || "—"
+              invoice.supplier_name ||
+              invoice.publisher_name ||
+              invoice.publisher_email ||
+              "—"
             }
           />
         )}

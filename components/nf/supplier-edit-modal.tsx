@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, Loader2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import type {
@@ -9,6 +9,7 @@ import type {
   ClientEntity,
   SupplierUpdatePayload,
   Moeda,
+  NfUser,
   PayWireType
 } from "@/types";
 
@@ -32,6 +33,38 @@ export function SupplierEditModal({ supplier, onClose, onSaved }: Props) {
   const [contactName, setContactName] = useState(supplier?.contact_name ?? "");
   const [contactEmail, setContactEmail] = useState(supplier?.contact_email ?? "");
   const [notes, setNotes] = useState(supplier?.notes ?? "");
+
+  // Modelo de fornecedor central: flag publisher + usuario do sistema linkado.
+  const [isPublisher, setIsPublisher] = useState<boolean>(supplier?.is_publisher ?? false);
+  const [userId, setUserId] = useState(supplier?.user_id ?? "");
+
+  // Lista de usuarios do sistema pro dropdown "Usuario linkado"
+  const [users, setUsers] = useState<NfUser[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [usersError, setUsersError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoadingUsers(true);
+      setUsersError("");
+      try {
+        const res: { items: NfUser[]; total: number } | NfUser[] =
+          await apiFetch("/nf/users");
+        const items = Array.isArray(res) ? res : res?.items || [];
+        if (cancelled) return;
+        setUsers(items);
+      } catch (err: any) {
+        if (cancelled) return;
+        setUsersError(err?.message || "Falha ao carregar usuarios");
+      } finally {
+        if (!cancelled) setLoadingUsers(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Dados de pagamento (HelmBank) — todos opcionais
   const [payWireType, setPayWireType] = useState<PayWireType>(
@@ -99,6 +132,8 @@ export function SupplierEditModal({ supplier, onClose, onSaved }: Props) {
       contact_name: contactName.trim() || null,
       contact_email: contactEmail.trim() || null,
       notes: notes.trim() || null,
+      is_publisher: isPublisher,
+      user_id: userId || null,
       // Dados de pagamento (HelmBank) — todos opcionais
       pay_wire_type: payWireType,
       pay_account_number: payAccountNumber.trim() || null,
@@ -281,6 +316,49 @@ export function SupplierEditModal({ supplier, onClose, onSaved }: Props) {
                 className={inputCls + " resize-y"}
                 placeholder="Observacoes internas (opcional)"
               />
+            </div>
+
+            {/* Modelo de fornecedor central: flag publisher + usuario linkado */}
+            <div className="space-y-4 rounded-xl border border-border bg-background/40 px-4 py-4">
+              <label className="flex cursor-pointer items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={isPublisher}
+                  onChange={(e) => setIsPublisher(e.target.checked)}
+                  className="h-4 w-4 accent-primary"
+                />
+                <span className="text-sm font-medium text-foreground">
+                  E publisher?
+                </span>
+              </label>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">
+                  Usuario linkado
+                </label>
+                <select
+                  value={userId}
+                  onChange={(e) => setUserId(e.target.value)}
+                  disabled={loadingUsers}
+                  className={inputCls + " disabled:opacity-60"}
+                >
+                  <option value="">
+                    {loadingUsers ? "Carregando..." : "— nenhum —"}
+                  </option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name ? `${u.name} (${u.email})` : u.email}
+                    </option>
+                  ))}
+                </select>
+                {usersError ? (
+                  <p className="mt-1 text-xs text-danger">{usersError}</p>
+                ) : (
+                  <p className="mt-1 text-xs text-muted">
+                    se esse fornecedor tem login no sistema
+                  </p>
+                )}
+              </div>
             </div>
 
             {/* Dados de pagamento (HelmBank) — secao colapsavel, tudo opcional */}

@@ -28,13 +28,16 @@ export interface Invoice {
   pdf_path?: string | null;
   notes_supplier?: string | null;
   notes_internal?: string | null;
-  // NF a Pagar pode ser vinculada a um publisher (usuario) OU a um fornecedor
-  // cadastrado (entidade sem login). Backend exige exatamente um dos dois.
+  // NF a Pagar SEMPRE aponta pra um fornecedor cadastrado (supplier_id).
+  // O conceito de "publisher" virou um atributo do fornecedor (is_publisher).
+  supplier_id?: string | null;
+  supplier_name?: string | null;
+  // Deprecado: publisher_id/name/email saiam do modelo antigo (NF -> publisher).
+  // Mantidos opcionais so pra render gracioso de NFs historicas; backend nao
+  // popula mais em NFs novas.
   publisher_id?: string | null;
   publisher_name?: string | null;
   publisher_email?: string | null;
-  supplier_id?: string | null;
-  supplier_name?: string | null;
   submitted_by?: string | null;
   submitted_by_name?: string | null;
   assignee_id?: string | null;
@@ -235,6 +238,10 @@ export interface Supplier extends SupplierPayFields {
   contact_email: string | null;
   notes: string | null;
   active: boolean;
+  // Modelo de fornecedor central: "publisher" e "usuario linkado" viraram
+  // atributos do fornecedor. Backend ainda em deploy — opcionais por enquanto.
+  is_publisher?: boolean;          // marca fornecedor que e publisher
+  user_id?: string | null;         // usuario do sistema linkado a esse fornecedor
   created_at?: string | null;
   updated_at?: string | null;
   created_by?: string | null;
@@ -249,6 +256,8 @@ export interface SupplierCreatePayload extends SupplierPayFields {
   contact_name?: string | null;
   contact_email?: string | null;
   notes?: string | null;
+  is_publisher?: boolean;
+  user_id?: string | null;
 }
 
 export interface SupplierUpdatePayload extends SupplierPayFields {
@@ -261,6 +270,8 @@ export interface SupplierUpdatePayload extends SupplierPayFields {
   contact_email?: string | null;
   notes?: string | null;
   active?: boolean;
+  is_publisher?: boolean;
+  user_id?: string | null;
 }
 
 // NF a Receber (Receivables). Espelha `backend/app/models/nf_receivables.py`.

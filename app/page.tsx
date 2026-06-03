@@ -751,7 +751,7 @@ function headersFor(role: string): string[] {
     "Campanha",
     "Status",
     "Aprovacoes",
-    "Publisher",
+    "Fornecedor",
     "Responsavel",
     "PDF",
     ""
@@ -818,8 +818,7 @@ function InvoiceRow({
       )}
       {role !== "publisher" && (
         <td className="px-5 py-4">
-          <p className="text-xs text-foreground">{invoice.publisher_name ?? invoice.supplier_name ?? "—"}</p>
-          <p className="text-[11px] text-muted">{invoice.publisher_email || ""}</p>
+          <p className="text-xs text-foreground">{invoice.supplier_name ?? invoice.publisher_name ?? "—"}</p>
         </td>
       )}
       {role !== "publisher" && (
