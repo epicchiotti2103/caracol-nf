@@ -30,7 +30,8 @@ import { useAuth } from "@/lib/auth-context";
 import {
   useNfRole,
   langForRole,
-  usePendingAssignedCount
+  usePendingAssignedCount,
+  useRefreshRole
 } from "@/lib/nf-role-context";
 import { apiFetch } from "@/lib/api";
 import { fmtCurrency, fmtDate, fmtRefMonth, tr } from "@/lib/i18n";
@@ -88,6 +89,7 @@ function HomeContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const pendingAssignedCount = usePendingAssignedCount();
+  const refreshRole = useRefreshRole();
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -166,6 +168,9 @@ function HomeContent() {
       const list: { items: Invoice[]; total: number } | Invoice[] = await apiFetch(url);
       const items = Array.isArray(list) ? list : list?.items || [];
       setInvoices(items);
+      // Revalida o contador do banner "NFs aguardando sua aprovacao"
+      // junto com a lista, pra nao ficar stale ate um reload completo.
+      void refreshRole();
       if (role === "admin") {
         try {
           const summaryUrl = serverQuery

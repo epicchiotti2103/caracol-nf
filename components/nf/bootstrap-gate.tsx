@@ -7,6 +7,7 @@ import { useAuth } from "@/lib/auth-context";
 import { apiFetch } from "@/lib/api";
 import { HUB_URL } from "@/lib/config";
 import { NfRoleProvider } from "@/lib/nf-role-context";
+import { getRoleCache, setRoleCache } from "@/lib/nf-role-cache";
 import type { MeRoleResponse, NfRole } from "@/types";
 
 type HubApp = {
@@ -29,17 +30,14 @@ type GateState =
 
 const VALID_HUB_ROLES = new Set(["admin", "user", "viewer", "client"]);
 
-// Cache em memoria por sessao. Limpo no logout (quando user vira null).
+// Cache de apps em memoria por sessao. Limpo no logout (quando user vira null).
+// O cache de role (papel + contador) mora em @/lib/nf-role-cache pra ser
+// compartilhado com o nf-role-context sem import circular.
 let appsCache: { userId: string; apps: HubApp[] } | null = null;
-let roleCache: {
-  userId: string;
-  role: NfRole | null;
-  pendingAssignedCount: number;
-} | null = null;
 
 export function clearBootstrapGateCache() {
   appsCache = null;
-  roleCache = null;
+  setRoleCache(null);
 }
 
 export function BootstrapGate({ children }: { children: React.ReactNode }) {
@@ -60,7 +58,7 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
     }
     if (!user) {
       appsCache = null;
-      roleCache = null;
+      setRoleCache(null);
       setState({ status: "idle" });
       return;
     }
@@ -71,25 +69,26 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
     }
 
     // Hit no cache: tem app + tem role -> ok direto
+    const cachedRole = getRoleCache();
     if (
       appsCache &&
       appsCache.userId === user.id &&
-      roleCache &&
-      roleCache.userId === user.id
+      cachedRole &&
+      cachedRole.userId === user.id
     ) {
       const has = appsCache.apps.some((a) => a.slug === "nf");
       if (!has) {
         setState({ status: "no-app" });
         return;
       }
-      if (!roleCache.role) {
+      if (!cachedRole.role) {
         setState({ status: "no-role" });
         return;
       }
       setState({
         status: "ok",
-        role: roleCache.role,
-        pendingAssignedCount: roleCache.pendingAssignedCount
+        role: cachedRole.role,
+        pendingAssignedCount: cachedRole.pendingAssignedCount
       });
       return;
     }
@@ -122,9 +121,10 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
         // deployar o novo campo.
         let role: NfRole | null;
         let pendingAssignedCount = 0;
-        if (roleCache && roleCache.userId === user.id) {
-          role = roleCache.role;
-          pendingAssignedCount = roleCache.pendingAssignedCount;
+        const cached = getRoleCache();
+        if (cached && cached.userId === user.id) {
+          role = cached.role;
+          pendingAssignedCount = cached.pendingAssignedCount;
         } else {
           const res: MeRoleResponse = await apiFetch("/nf/me/role");
           role = res?.role ?? null;
@@ -133,7 +133,7 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
               ? Number(res.pending_my_approval_count)
               : Number(res?.pending_assigned_count) || 0;
           pendingAssignedCount = Math.max(0, pendingMy || 0);
-          roleCache = { userId: user.id, role, pendingAssignedCount };
+          setRoleCache({ userId: user.id, role, pendingAssignedCount });
         }
         if (cancelled) return;
 
@@ -233,7 +233,7 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
           <button
             onClick={() => {
               appsCache = null;
-              roleCache = null;
+              setRoleCache(null);
               setState({ status: "idle" });
             }}
             className="mt-2 inline-flex h-9 items-center rounded border border-border bg-surface px-3 text-[13px] hover:bg-background"
