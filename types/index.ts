@@ -199,10 +199,30 @@ export interface ClientUpdatePayload {
   active?: boolean;
 }
 
+// Tipo de transferencia HelmBank. Backend ainda em deploy — frontend trata
+// `undefined`/`null` como "sem dados de pagamento".
+export type PayWireType = "domestic" | "international";
+
+// Dados de pagamento (HelmBank) — todos opcionais. Espelha as colunas `pay_*`
+// que o backend adiciona a tabela `suppliers`. Reusado em Supplier + payloads.
+export interface SupplierPayFields {
+  pay_wire_type?: PayWireType | null;
+  pay_account_number?: string | null;        // conta ou IBAN
+  pay_creditor_country?: string | null;
+  pay_creditor_city?: string | null;
+  pay_creditor_address?: string | null;
+  pay_creditor_phone?: string | null;
+  pay_beneficiary_bank_name?: string | null;
+  pay_beneficiary_bank_code?: string | null; // Creditor Agent: SWIFT (intl) ou Routing/ABA (domestic)
+  pay_correspondent_bank_name?: string | null;
+  pay_correspondent_bank_swift?: string | null;
+  pay_instructions?: string | null;          // texto livre (email de remessa)
+}
+
 // Fornecedor (entidade cadastral pura — sem login). Backend: /api/v1/suppliers.
-// Espelha o shape de `Client` (mesmas colunas), usado pra vincular NF a Pagar a
-// uma entidade fornecedora que nao tem usuario/publisher no sistema.
-export interface Supplier {
+// Espelha o shape de `Client` (mesmas colunas) + os campos `pay_*` (HelmBank),
+// usado pra vincular NF a Pagar a uma entidade fornecedora sem usuario/publisher.
+export interface Supplier extends SupplierPayFields {
   id: string;
   name: string;
   tax_id: string | null;
@@ -217,7 +237,7 @@ export interface Supplier {
   created_by?: string | null;
 }
 
-export interface SupplierCreatePayload {
+export interface SupplierCreatePayload extends SupplierPayFields {
   name: string;
   tax_id?: string | null;
   default_entity?: ClientEntity;
@@ -227,7 +247,7 @@ export interface SupplierCreatePayload {
   notes?: string | null;
 }
 
-export interface SupplierUpdatePayload {
+export interface SupplierUpdatePayload extends SupplierPayFields {
   name?: string;
   tax_id?: string | null;
   default_entity?: ClientEntity;

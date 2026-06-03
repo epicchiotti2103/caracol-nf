@@ -23,7 +23,7 @@ import { useNfRole, langForRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
 import { fmtCurrency, fmtDate, fmtDateTime, fmtRefMonth } from "@/lib/i18n";
-import type { Invoice, NfUser } from "@/types";
+import type { Invoice, NfUser, Supplier } from "@/types";
 
 type Action = "approve_adm" | "approve_admin" | "reject" | "pay";
 
@@ -67,6 +67,10 @@ function InvoiceDetail({ id }: { id: string }) {
 
   // Modal de edicao da NF (admin/adm_campanha em em_analise)
   const [editOpen, setEditOpen] = useState(false);
+
+  // Dados de pagamento do fornecedor vinculado (HelmBank) — read-only, so admin.
+  // Backend pode nao ter os campos pay_* ainda; tratamos graceful.
+  const [supplierPay, setSupplierPay] = useState<Supplier | null>(null);
 
   // Reatribuicao de responsavel
   const [assignOpen, setAssignOpen] = useState(false);
@@ -197,6 +201,27 @@ function InvoiceDetail({ id }: { id: string }) {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Busca dados de pagamento do fornecedor (so admin/adm_campanha; so se a NF
+  // estiver vinculada a um supplier_id). Falha silenciosa — bloco e opcional.
+  useEffect(() => {
+    const sid = invoice?.supplier_id;
+    if (!sid || (role !== "admin" && role !== "adm_campanha")) {
+      setSupplierPay(null);
+      return;
+    }
+    let cancelled = false;
+    apiFetch(`/suppliers/${sid}`)
+      .then((s: Supplier) => {
+        if (!cancelled) setSupplierPay(s);
+      })
+      .catch(() => {
+        if (!cancelled) setSupplierPay(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [invoice?.supplier_id, role]);
 
   const loadUsers = async () => {
     if (usersLoaded || loadingUsers) return;
@@ -629,6 +654,9 @@ function InvoiceDetail({ id }: { id: string }) {
         )}
       </div>
 
+      {/* Dados de pagamento do fornecedor (HelmBank) — read-only, so admin/adm */}
+      {supplierPay && <SupplierPayBlock supplier={supplierPay} />}
+
       {/* Paineis de notas */}
       <NotesPanels
         role={role}
@@ -1052,6 +1080,60 @@ function NotesPanels({
           )}
         </button>
       </div>
+    </div>
+  );
+}
+
+function SupplierPayBlock({ supplier }: { supplier: Supplier }) {
+  const isIntl = supplier.pay_wire_type !== "domestic";
+  const rows: Array<[string, string | null | undefined]> = [
+    ["Tipo", supplier.pay_wire_type ? (isIntl ? "Internacional (SWIFT)" : "Domestica (Routing/ABA)") : null],
+    ["Conta / IBAN", supplier.pay_account_number],
+    ["Banco beneficiario", supplier.pay_beneficiary_bank_name],
+    [isIntl ? "SWIFT" : "Routing/ABA", supplier.pay_beneficiary_bank_code],
+    ["Banco correspondente", supplier.pay_correspondent_bank_name],
+    ["SWIFT correspondente", supplier.pay_correspondent_bank_swift],
+    ["Pais", supplier.pay_creditor_country],
+    ["Cidade", supplier.pay_creditor_city],
+    ["Endereco", supplier.pay_creditor_address],
+    ["Telefone", supplier.pay_creditor_phone]
+  ];
+  const filled = rows.filter(([, v]) => !!v && String(v).trim());
+  const hasInstructions = !!supplier.pay_instructions?.trim();
+
+  // Nada cadastrado: nao mostra o bloco.
+  if (filled.length === 0 && !hasInstructions) return null;
+
+  return (
+    <div className="mt-6 rounded-xl border border-primary/30 bg-primary/5 p-6">
+      <div className="mb-3 flex items-center gap-2">
+        <Wallet className="h-4 w-4 text-primary" />
+        <p className="text-xs font-semibold uppercase tracking-wider text-primary">
+          Dados de pagamento (HelmBank)
+        </p>
+      </div>
+      {filled.length > 0 && (
+        <div className="space-y-2">
+          {filled.map(([label, value]) => (
+            <div key={label} className="flex items-baseline justify-between gap-4">
+              <p className="text-xs uppercase tracking-wider text-muted">{label}</p>
+              <p className="select-all text-right text-sm font-medium text-foreground">
+                {value}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+      {hasInstructions && (
+        <div className="mt-4 border-t border-primary/20 pt-4">
+          <p className="mb-1.5 text-xs uppercase tracking-wider text-muted">
+            Instrucoes de pagamento
+          </p>
+          <p className="select-all whitespace-pre-wrap text-sm text-foreground">
+            {supplier.pay_instructions}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
