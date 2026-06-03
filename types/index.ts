@@ -226,7 +226,8 @@ export interface SupplierPayFields {
 // usado pra vincular NF a Pagar a uma entidade fornecedora sem usuario/publisher.
 export interface Supplier extends SupplierPayFields {
   id: string;
-  name: string;
+  name: string;             // nome fantasia (exibicao na lista/NF)
+  legal_name?: string | null; // razao social / nome real (usado pra pagar)
   tax_id: string | null;
   default_entity: ClientEntity;
   default_moeda: Moeda;
@@ -241,6 +242,7 @@ export interface Supplier extends SupplierPayFields {
 
 export interface SupplierCreatePayload extends SupplierPayFields {
   name: string;
+  legal_name?: string | null;
   tax_id?: string | null;
   default_entity?: ClientEntity;
   default_moeda?: Moeda;
@@ -251,6 +253,7 @@ export interface SupplierCreatePayload extends SupplierPayFields {
 
 export interface SupplierUpdatePayload extends SupplierPayFields {
   name?: string;
+  legal_name?: string | null;
   tax_id?: string | null;
   default_entity?: ClientEntity;
   default_moeda?: Moeda;

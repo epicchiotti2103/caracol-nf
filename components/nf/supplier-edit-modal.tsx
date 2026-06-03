@@ -25,6 +25,7 @@ export function SupplierEditModal({ supplier, onClose, onSaved }: Props) {
   const isEdit = !!supplier;
 
   const [name, setName] = useState(supplier?.name ?? "");
+  const [legalName, setLegalName] = useState(supplier?.legal_name ?? "");
   const [taxId, setTaxId] = useState(supplier?.tax_id ?? "");
   const [entity, setEntity] = useState<ClientEntity>(supplier?.default_entity ?? "BR");
   const [moeda, setMoeda] = useState<Moeda>(supplier?.default_moeda ?? "BRL");
@@ -91,6 +92,7 @@ export function SupplierEditModal({ supplier, onClose, onSaved }: Props) {
   const buildPayload = (): SupplierCreatePayload | SupplierUpdatePayload => {
     const out: any = {
       name: name.trim(),
+      legal_name: legalName.trim() || null,
       tax_id: taxId.trim() || null,
       default_entity: entity,
       default_moeda: moeda,
@@ -176,15 +178,28 @@ export function SupplierEditModal({ supplier, onClose, onSaved }: Props) {
           <div className="space-y-4">
             <div>
               <label className="mb-1.5 block text-sm font-medium text-foreground">
-                Nome <span className="text-primary">*</span>
+                Nome fantasia <span className="text-primary">*</span>
               </label>
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className={inputCls}
-                placeholder="Ex: Acme Inc"
+                placeholder="Nome de exibicao (ex: Talent.com)"
                 autoFocus
               />
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                Razao social / Nome real
+              </label>
+              <input
+                value={legalName}
+                onChange={(e) => setLegalName(e.target.value)}
+                className={inputCls}
+                placeholder="Nome completo pra pagamento (ex: Talent.com Europe Sarl)"
+              />
+              <p className="mt-1 text-xs text-muted">usado na hora de pagar</p>
             </div>
 
             <div>

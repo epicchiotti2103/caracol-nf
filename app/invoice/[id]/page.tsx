@@ -1087,6 +1087,7 @@ function NotesPanels({
 function SupplierPayBlock({ supplier }: { supplier: Supplier }) {
   const isIntl = supplier.pay_wire_type !== "domestic";
   const rows: Array<[string, string | null | undefined]> = [
+    ["Razao social / Beneficiario", supplier.legal_name ?? supplier.name],
     ["Tipo", supplier.pay_wire_type ? (isIntl ? "Internacional (SWIFT)" : "Domestica (Routing/ABA)") : null],
     ["Conta / IBAN", supplier.pay_account_number],
     ["Banco beneficiario", supplier.pay_beneficiary_bank_name],
