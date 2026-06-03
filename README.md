@@ -19,8 +19,10 @@ CRUD de invoices funcionando, com upload de PDF, papeis intra-NF (publisher / ad
 
 - `/login` — login conectado ao Supabase Auth (via API do Tracker)
 - `/` — lista de notas fiscais (renderizacao diferente por papel; titulo, colunas e botoes adaptam)
-- `/invoice/new` — formulario de cadastro de NF com upload de PDF (form bilingual: ingles pra publisher, portugues pros outros). Admin/adm_campanha precisam selecionar o publisher num `<select>` obrigatorio (alimentado por `GET /nf/users` filtrado por `nf_role === "publisher"`); publisher cadastra direto pra si. Campo **Moeda** (BRL/USD, default BRL) ao lado do Valor; prefix `R$` ou `US$` alterna conforme selecao.
+- `/invoice/new` — formulario de cadastro de NF com upload de PDF (form bilingual: ingles pra publisher, portugues pros outros). Admin/adm_campanha veem um **toggle "Vincular a"**: a NF a pagar pode ser amarrada a um **Publisher (usuario)** num `<select>` (alimentado por `GET /nf/users` filtrado por `nf_role === "publisher"`) OU a um **Fornecedor cadastrado** (`<select>` de `GET /suppliers?active=true`, entidade sem login). Exatamente um dos dois e obrigatorio; o form envia `publisher_id` OU `supplier_id` no FormData do `POST /nf/invoices`. Publisher cadastra direto pra si (sem toggle). Campo **Moeda** (BRL/USD, default BRL) ao lado do Valor; prefix `R$` ou `US$` alterna conforme selecao.
 - `/invoice/[id]` — detalhe com auditoria das 2 aprovacoes + pagamento, badges `2/2 aprovacoes` e `Vencida ha N dias`, acoes condicionais por papel (incluindo modal de "designar pagador" quando admin completa a dupla), painel de notas e **timeline de eventos** (`GET /nf/invoices/{id}/events`)
+- `/admin/clientes` — cadastro de clientes (entidades que recebem NF a receber). Apenas admin cria/edita; admin e adm_campanha visualizam. CRUD via `/clients`.
+- `/admin/fornecedores` — cadastro de fornecedores (entidades que emitem NF a pagar, sem login no sistema). Mesma UI/permissoes dos clientes; CRUD via `/suppliers`. Usado pra vincular NF a Pagar a um fornecedor quando nao ha publisher/usuario correspondente.
 - `/admin/usuarios-nf` — gestao de papeis intra-NF (apenas admin)
 
 No dashboard `/`, admins e adm_campanha veem **3 chips no topo** (pendentes / a pagar / vencidas). Cada chip abre um hovercard (com fallback de clique no mobile) listando ate 5 NFs do balde + link "ver todas" que aplica o filtro. Admin tambem ve 3 stat cards abaixo dos chips — os de **A pagar** e **Pagas (30d)** mostram total em **R$** e **US$** em duas linhas (`to_pay_brl`/`to_pay_usd`, `paid_last_30d_brl`/`paid_last_30d_usd`).
@@ -67,9 +69,11 @@ Cada NF tem um campo opcional `assignee_id` (preenchido automaticamente no `POST
 
 No detalhe da NF, admin/adm_campanha veem o nome do responsavel e podem reatribuir via `PATCH /nf/invoices/{id}/assignee` (modal com `<select>` listando admins + adms de campanha; opcao "sem responsavel" zera). Publisher so ve o nome em modo read-only, traduzido como "Reviewer".
 
-## Cadastro em nome do publisher
+## Cadastro em nome de publisher ou fornecedor
 
-Admin/adm_campanha podem criar uma NF em nome de outro publisher: o form `/invoice/new` exige a selecao do publisher num `<select>` no topo (lista vem de `GET /nf/users` filtrada por `nf_role === "publisher"`) e envia `publisher_id` no FormData do `POST /nf/invoices`. Se nao houver publisher cadastrado, o form mostra um warning com link pra `/admin/usuarios-nf` e desabilita o submit. O detalhe da NF distingue **publisher** (parceiro/fornecedor, `publisher_id`/`publisher_name`) de **submitted_by** (quem cadastrou), exibindo a linha discreta "Cadastrado por: X" / "Submitted by: X" abaixo do publisher apenas quando `submitted_by !== publisher_id`.
+Admin/adm_campanha podem criar uma NF a pagar vinculada a **um Publisher (usuario)** OU a **um Fornecedor cadastrado** — toggle "Vincular a" no topo do form `/invoice/new`. Na opcao Publisher, o `<select>` lista usuarios com `nf_role === "publisher"` (`GET /nf/users`) e o form envia `publisher_id`. Na opcao Fornecedor, o `<select>` lista fornecedores ativos (`GET /suppliers?active=true`) e o form envia `supplier_id`. Exatamente um dos dois e obrigatorio (o backend valida). Quando a fonte selecionada nao tem registros, o form mostra um warning com link pra `/admin/usuarios-nf` ou `/admin/fornecedores` e desabilita o submit.
+
+Na listagem e no detalhe da NF, a coluna/linha de origem mostra `publisher_name` quando ha publisher, com fallback pra `supplier_name` quando a NF foi vinculada a um fornecedor. O detalhe tambem distingue **publisher/fornecedor** (a fonte da NF) de **submitted_by** (quem cadastrou), exibindo "Cadastrado por: X" abaixo apenas quando `submitted_by !== publisher_id`. O modal de edicao (`/invoice/[id]`, NFs em `em_analise`) tem o mesmo toggle, permitindo trocar de publisher pra fornecedor e vice-versa.
 
 ## Controle de acesso
 

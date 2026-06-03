@@ -78,7 +78,7 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `GET /nf/invoices/{id}` — detalhe (inclui campos derivados acima + auditoria de aprovacoes duplas)
 - `GET /nf/invoices/{id}/pdf` — `{url}` assinada (5min)
 - `GET /nf/invoices/{id}/events` — timeline de auditoria. Itens `{event_type, from_value, to_value, actor: {id, name}, created_at}`. Tipos: `status_change`, `assignee_change`, `approval_added`, `paid_by_designated`, `notes_update`
-- `POST /nf/invoices` — cria (multipart, campo `pdf` opcional). Admin/adm_campanha **devem** enviar `publisher_id`; publisher cadastrando pra si nao precisa. Form envia `moeda` (`BRL` ou `USD`, default `BRL`) — campo novo, backend trata `undefined` como `BRL` pra graceful degradation.
+- `POST /nf/invoices` — cria (multipart, campo `pdf` opcional). Admin/adm_campanha **devem** enviar **exatamente um** entre `publisher_id` (usuario) e `supplier_id` (fornecedor cadastrado); publisher cadastrando pra si nao precisa. Form envia `moeda` (`BRL` ou `USD`, default `BRL`) — backend trata `undefined` como `BRL` pra graceful degradation.
 - `POST /nf/invoices/{id}/approve` — body opcional `{paid_by_assignee_id}`. Backend detecta papel do caller (adm_campanha ou admin) e popula a coluna certa. Quando ambas aprovacoes existem, status vai pra `aprovada`. Se for admin completando a dupla, ele pode designar pagador via `paid_by_assignee_id`.
 - `POST /nf/invoices/{id}/reject` — body `{reason, notes_internal?}`. So funciona em `em_analise`. `reason` vai pra `notes_supplier`.
 - `POST /nf/invoices/{id}/pay` — admin only. **Multipart/form-data** com campo `proof` obrigatorio (PNG, JPEG ou PDF, max 10MB). Marca como `paga` e grava `paid_proof_path` no storage.
@@ -89,6 +89,8 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `GET /nf/dashboard/pending-approvals` | `/to-pay` | `/overdue` — listas curtas (ate 10 itens) com `{invoice_id, invoice_number, fornecedor, valor, moeda?, aguarda?, pagador?, dias_atraso?}` pra preview do hovercard dos chips
 - `GET /nf/users` — lista users com `nf_role` (admin)
 - `PUT /nf/users/{user_id}/role` — `{role: NfRole | null}` (admin)
+- `GET /clients` — lista clientes (entidades que recebem NF a receber). Filtros `active` (default `true`), `entity`, `q`. Retorna `{items:[...]}`. `GET /clients/{id}`, `POST /clients`, `PATCH /clients/{id}`, `PATCH /clients/{id}/toggle-active`. Consumido por `/admin/clientes`.
+- `GET /suppliers` — espelha `/clients` pra fornecedores (entidades que emitem NF a pagar, sem login). Mesmos filtros e shape `{items:[...]}`. `GET /suppliers/{id}`, `POST /suppliers`, `PATCH /suppliers/{id}`, `PATCH /suppliers/{id}/toggle-active`. Consumido por `/admin/fornecedores` e pelos selects de fornecedor em `/invoice/new` e no modal de edicao.
 
 **Deprecado**: `PATCH /nf/invoices/{id}/status` foi substituido pelos endpoints `/approve`, `/reject`, `/pay`. Frontend nao chama mais.
 
@@ -136,7 +138,7 @@ Cada NF tambem tem `assignee_id` / `assignee_name` (responsavel pela revisao). `
 
 O frontend exibe `publisher_name`, `approved_by_name`, `paid_by_name` e `assignee_name` populados pelo backend. UUIDs nao aparecem mais na UI — fallback e "—".
 
-Backend tambem separa **publisher** (parceiro/fornecedor — `publisher_id`/`publisher_name`/`publisher_email`) de **submitted_by** (quem cadastrou de fato — `submitted_by`/`submitted_by_name`). Quando admin/adm_campanha cadastra NF em nome de um publisher, o form `/invoice/new` exige `<select>` obrigatorio com a lista de publishers e envia `publisher_id` no FormData; publisher cadastrando pra si nao precisa (backend usa o proprio user). No detalhe, abaixo da linha do publisher, aparece uma linha discreta "Cadastrado por: X" / "Submitted by: X" apenas quando `submitted_by !== publisher_id`.
+Backend tambem separa a **fonte da NF** de **submitted_by** (quem cadastrou de fato — `submitted_by`/`submitted_by_name`). A fonte pode ser um **publisher** (usuario — `publisher_id`/`publisher_name`/`publisher_email`) OU um **fornecedor cadastrado** (entidade sem login — `supplier_id`/`supplier_name`). Quando admin/adm_campanha cadastra a NF, o form `/invoice/new` tem um toggle "Vincular a" e envia `publisher_id` OU `supplier_id` no FormData (exatamente um, validado no backend); publisher cadastrando pra si nao precisa (backend usa o proprio user). No frontend, onde antes so se lia `publisher_name`, agora ha fallback `publisher_name ?? supplier_name`. No detalhe, abaixo da linha da fonte, aparece "Cadastrado por: X" / "Submitted by: X" apenas quando `submitted_by !== publisher_id`. O modal de edicao (`/invoice/[id]`) tem o mesmo toggle e permite trocar a fonte enquanto a NF esta `em_analise`.
 
 ## Bilinguismo
 

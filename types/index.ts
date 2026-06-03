@@ -28,9 +28,13 @@ export interface Invoice {
   pdf_path?: string | null;
   notes_supplier?: string | null;
   notes_internal?: string | null;
-  publisher_id: string;
+  // NF a Pagar pode ser vinculada a um publisher (usuario) OU a um fornecedor
+  // cadastrado (entidade sem login). Backend exige exatamente um dos dois.
+  publisher_id?: string | null;
   publisher_name?: string | null;
   publisher_email?: string | null;
+  supplier_id?: string | null;
+  supplier_name?: string | null;
   submitted_by?: string | null;
   submitted_by_name?: string | null;
   assignee_id?: string | null;
@@ -185,6 +189,45 @@ export interface ClientCreatePayload {
 }
 
 export interface ClientUpdatePayload {
+  name?: string;
+  tax_id?: string | null;
+  default_entity?: ClientEntity;
+  default_moeda?: Moeda;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  notes?: string | null;
+  active?: boolean;
+}
+
+// Fornecedor (entidade cadastral pura — sem login). Backend: /api/v1/suppliers.
+// Espelha o shape de `Client` (mesmas colunas), usado pra vincular NF a Pagar a
+// uma entidade fornecedora que nao tem usuario/publisher no sistema.
+export interface Supplier {
+  id: string;
+  name: string;
+  tax_id: string | null;
+  default_entity: ClientEntity;
+  default_moeda: Moeda;
+  contact_name: string | null;
+  contact_email: string | null;
+  notes: string | null;
+  active: boolean;
+  created_at?: string | null;
+  updated_at?: string | null;
+  created_by?: string | null;
+}
+
+export interface SupplierCreatePayload {
+  name: string;
+  tax_id?: string | null;
+  default_entity?: ClientEntity;
+  default_moeda?: Moeda;
+  contact_name?: string | null;
+  contact_email?: string | null;
+  notes?: string | null;
+}
+
+export interface SupplierUpdatePayload {
   name?: string;
   tax_id?: string | null;
   default_entity?: ClientEntity;
