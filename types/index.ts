@@ -92,6 +92,8 @@ export interface DashboardSummary {
   overdue_count?: number;
   // Totais por moeda (backend ainda em deploy — opcionais por enquanto).
   // Campos legados acima (to_pay.total_amount etc) passam a representar so BRL.
+  pending_review_brl?: number;
+  pending_review_usd?: number;
   to_pay_brl?: number;
   to_pay_usd?: number;
   overdue_brl?: number;

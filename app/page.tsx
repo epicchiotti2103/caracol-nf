@@ -537,11 +537,12 @@ function HomeContent() {
 
       {role === "admin" && summary && (
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
-          <StatCard
+          <DualCurrencyStatCard
             icon={Clock}
             label="Em analise"
-            value={String(summary.pending_review?.count ?? 0)}
-            sub={`${fmtCurrency(summary.pending_review?.total_amount || 0, "BRL", "pt")} em valor`}
+            brl={summary.pending_review_brl ?? summary.pending_review?.total_amount ?? 0}
+            usd={summary.pending_review_usd ?? 0}
+            sub={`${summary.pending_review?.count ?? 0} aguardando analise`}
           />
           <DualCurrencyStatCard
             icon={DollarSign}
@@ -842,31 +843,6 @@ function InvoiceRow({
         <Eye className="h-4 w-4 text-muted opacity-0 transition-opacity group-hover:opacity-100" />
       </td>
     </tr>
-  );
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  sub
-}: {
-  icon: React.ElementType;
-  label: string;
-  value: string;
-  sub?: string;
-}) {
-  return (
-    <div className="flex items-start gap-4 rounded-xl border border-border bg-surface p-5">
-      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-primary/10">
-        <Icon className="h-4 w-4 text-primary" />
-      </div>
-      <div className="min-w-0">
-        <p className="mb-0.5 text-xs font-medium text-muted">{label}</p>
-        <p className="text-xl font-semibold text-foreground">{value}</p>
-        {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}
-      </div>
-    </div>
   );
 }
 
