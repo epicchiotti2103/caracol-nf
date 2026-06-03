@@ -15,7 +15,7 @@ import { AppShell } from "@/components/app-shell";
 import { useNfRole, langForRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
-import type { NfUser } from "@/types";
+import type { NfUser, Supplier } from "@/types";
 
 const MAX_PDF_MB = 10;
 
@@ -67,10 +67,20 @@ function NewInvoiceForm() {
   const [pdf, setPdf] = useState<File | null>(null);
   const [publisherId, setPublisherId] = useState("");
 
+  // Admin/adm_campanha podem vincular a NF a um Publisher (usuario) OU a um
+  // Fornecedor cadastrado (entidade sem login). Toggle entre os dois.
+  const [sourceKind, setSourceKind] = useState<"publisher" | "supplier">("publisher");
+  const [supplierId, setSupplierId] = useState("");
+
   // Carregamento da lista de publishers (so quando admin/adm_campanha)
   const [publishers, setPublishers] = useState<NfUser[]>([]);
   const [loadingPublishers, setLoadingPublishers] = useState(false);
   const [publishersError, setPublishersError] = useState("");
+
+  // Carregamento da lista de fornecedores ativos (so quando admin/adm_campanha)
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+  const [suppliersError, setSuppliersError] = useState("");
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -94,6 +104,30 @@ function NewInvoiceForm() {
         setPublishersError(err?.message || "Falha ao carregar publishers.");
       } finally {
         if (!cancelled) setLoadingPublishers(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [needsPublisherSelect]);
+
+  useEffect(() => {
+    if (!needsPublisherSelect) return;
+    let cancelled = false;
+    (async () => {
+      setLoadingSuppliers(true);
+      setSuppliersError("");
+      try {
+        const res: { items: Supplier[] } | Supplier[] =
+          await apiFetch("/suppliers?active=true");
+        const items = Array.isArray(res) ? res : res?.items || [];
+        if (cancelled) return;
+        setSuppliers(items);
+      } catch (err: any) {
+        if (cancelled) return;
+        setSuppliersError(err?.message || "Falha ao carregar fornecedores.");
+      } finally {
+        if (!cancelled) setLoadingSuppliers(false);
       }
     })();
     return () => {
@@ -135,6 +169,16 @@ function NewInvoiceForm() {
     noPublishers:
       "Nenhum publisher cadastrado ainda. Cadastre um publisher em /admin/usuarios-nf antes de criar uma NF.",
     goToUsuariosNf: "Ir para /admin/usuarios-nf",
+    sourceKindLabel: "Vincular a",
+    sourcePublisher: "Publisher (usuario)",
+    sourceSupplier: "Fornecedor cadastrado",
+    supplierLabel: "Fornecedor",
+    supplierPlaceholder: "Selecione um fornecedor",
+    supplierLoading: "Carregando fornecedores...",
+    supplierRequired: "Selecione um fornecedor.",
+    noSuppliers:
+      "Nenhum fornecedor cadastrado ainda. Cadastre um fornecedor antes de criar uma NF vinculada a fornecedor.",
+    goToFornecedores: "Ir para /admin/fornecedores",
     successTitle: lang === "pt" ? "NF enviada!" : "Invoice sent!",
     successSub:
       lang === "pt"
@@ -151,7 +195,10 @@ function NewInvoiceForm() {
   };
 
   const validate = () => {
-    if (needsPublisherSelect && !publisherId) return labels.publisherRequired;
+    if (needsPublisherSelect) {
+      if (sourceKind === "publisher" && !publisherId) return labels.publisherRequired;
+      if (sourceKind === "supplier" && !supplierId) return labels.supplierRequired;
+    }
     if (!invoiceNumber.trim()) return labels.invoiceNumber + " — " + labels.required;
     const amt = parseFloat(amount.replace(",", "."));
     if (isNaN(amt) || amt <= 0) return labels.amountGt0;
@@ -193,8 +240,12 @@ function NewInvoiceForm() {
       const refIso = refMonth.length === 7 ? `${refMonth}-01` : refMonth;
       fd.append("reference_month", refIso);
       fd.append("campaign_name", campaign.trim());
-      if (needsPublisherSelect && publisherId) {
-        fd.append("publisher_id", publisherId);
+      if (needsPublisherSelect) {
+        if (sourceKind === "supplier" && supplierId) {
+          fd.append("supplier_id", supplierId);
+        } else if (publisherId) {
+          fd.append("publisher_id", publisherId);
+        }
       }
       if (pdf) fd.append("pdf", pdf);
 
@@ -227,6 +278,8 @@ function NewInvoiceForm() {
               setCampaign("");
               setPdf(null);
               setPublisherId("");
+              setSupplierId("");
+              setSourceKind("publisher");
               setMoeda("BRL");
             }}
             className="rounded-lg border border-border px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-surface"
@@ -270,6 +323,7 @@ function NewInvoiceForm() {
       )}
 
       {needsPublisherSelect &&
+        sourceKind === "publisher" &&
         !loadingPublishers &&
         publishers.length === 0 &&
         !publishersError && (
@@ -289,31 +343,109 @@ function NewInvoiceForm() {
           </div>
         )}
 
+      {needsPublisherSelect &&
+        sourceKind === "supplier" &&
+        !loadingSuppliers &&
+        suppliers.length === 0 &&
+        !suppliersError && (
+          <div className="mb-6 rounded-lg border border-amber-500/30 bg-amber-500/10 p-4">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-300" />
+              <div className="flex-1">
+                <p className="text-sm text-amber-100">{labels.noSuppliers}</p>
+                <Link
+                  href="/admin/fornecedores"
+                  className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
+                >
+                  {labels.goToFornecedores}
+                </Link>
+              </div>
+            </div>
+          </div>
+        )}
+
       <form onSubmit={onSubmit} className="space-y-5 rounded-xl border border-border bg-surface p-6">
         {needsPublisherSelect && (
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              {labels.publisherLabel} <span className="text-primary">*</span>
-            </label>
-            <select
-              value={publisherId}
-              onChange={(e) => setPublisherId(e.target.value)}
-              disabled={loadingPublishers || publishers.length === 0}
-              className={inputCls + " disabled:opacity-60"}
-            >
-              <option value="">
-                {loadingPublishers
-                  ? labels.publisherLoading
-                  : labels.publisherPlaceholder}
-              </option>
-              {publishers.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name ? `${u.name} (${u.email})` : u.email}
-                </option>
-              ))}
-            </select>
-            {publishersError && (
-              <p className="mt-1 text-xs text-danger">{publishersError}</p>
+          <div className="space-y-3">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                {labels.sourceKindLabel} <span className="text-primary">*</span>
+              </label>
+              <div className="flex items-center gap-1 rounded-lg border border-border bg-background p-1">
+                {(
+                  [
+                    { v: "publisher", l: labels.sourcePublisher },
+                    { v: "supplier", l: labels.sourceSupplier }
+                  ] as Array<{ v: "publisher" | "supplier"; l: string }>
+                ).map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setSourceKind(opt.v)}
+                    className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                      sourceKind === opt.v
+                        ? "bg-primary text-black"
+                        : "text-muted hover:text-foreground"
+                    }`}
+                  >
+                    {opt.l}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {sourceKind === "publisher" ? (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">
+                  {labels.publisherLabel} <span className="text-primary">*</span>
+                </label>
+                <select
+                  value={publisherId}
+                  onChange={(e) => setPublisherId(e.target.value)}
+                  disabled={loadingPublishers || publishers.length === 0}
+                  className={inputCls + " disabled:opacity-60"}
+                >
+                  <option value="">
+                    {loadingPublishers
+                      ? labels.publisherLoading
+                      : labels.publisherPlaceholder}
+                  </option>
+                  {publishers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name ? `${u.name} (${u.email})` : u.email}
+                    </option>
+                  ))}
+                </select>
+                {publishersError && (
+                  <p className="mt-1 text-xs text-danger">{publishersError}</p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">
+                  {labels.supplierLabel} <span className="text-primary">*</span>
+                </label>
+                <select
+                  value={supplierId}
+                  onChange={(e) => setSupplierId(e.target.value)}
+                  disabled={loadingSuppliers || suppliers.length === 0}
+                  className={inputCls + " disabled:opacity-60"}
+                >
+                  <option value="">
+                    {loadingSuppliers
+                      ? labels.supplierLoading
+                      : labels.supplierPlaceholder}
+                  </option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.tax_id ? `${s.name} (${s.tax_id})` : s.name}
+                    </option>
+                  ))}
+                </select>
+                {suppliersError && (
+                  <p className="mt-1 text-xs text-danger">{suppliersError}</p>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -453,7 +585,12 @@ function NewInvoiceForm() {
             type="submit"
             disabled={
               submitting ||
-              (needsPublisherSelect && publishers.length === 0)
+              (needsPublisherSelect &&
+                sourceKind === "publisher" &&
+                publishers.length === 0) ||
+              (needsPublisherSelect &&
+                sourceKind === "supplier" &&
+                suppliers.length === 0)
             }
             className="flex items-center gap-2 rounded-lg bg-primary px-6 py-2.5 text-sm font-semibold text-black transition-opacity hover:opacity-90 disabled:opacity-60"
           >

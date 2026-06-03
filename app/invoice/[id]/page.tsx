@@ -542,7 +542,7 @@ function InvoiceDetail({ id }: { id: string }) {
                 ? `${invoice.publisher_name}${
                     invoice.publisher_email ? ` (${invoice.publisher_email})` : ""
                   }`
-                : invoice.publisher_email || "—"
+                : invoice.publisher_email || invoice.supplier_name || "—"
             }
           />
         )}

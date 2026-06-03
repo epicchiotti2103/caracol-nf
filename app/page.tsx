@@ -812,7 +812,7 @@ function InvoiceRow({
       )}
       {role !== "publisher" && (
         <td className="px-5 py-4">
-          <p className="text-xs text-foreground">{invoice.publisher_name || "—"}</p>
+          <p className="text-xs text-foreground">{invoice.publisher_name ?? invoice.supplier_name ?? "—"}</p>
           <p className="text-[11px] text-muted">{invoice.publisher_email || ""}</p>
         </td>
       )}
