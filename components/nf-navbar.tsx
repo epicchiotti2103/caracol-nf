@@ -7,15 +7,17 @@ import { useAuth } from "@/lib/auth-context";
 import { useNfRole, langForRole } from "@/lib/nf-role-context";
 import { HUB_URL } from "@/lib/config";
 import { Building2, FileText, LogOut, ArrowLeft, ShieldCheck, Truck, User, Users } from "lucide-react";
+import type { NfRole } from "@/types";
 
-type LinkDef = { href: string; label: string; icon: any; adminOnly?: boolean };
+// roles: se omitido, link e visivel para todos os papeis do idioma
+type LinkDef = { href: string; label: string; icon: any; roles?: NfRole[] };
 
 const linksByLang: Record<"pt" | "en", LinkDef[]> = {
   pt: [
     { href: "/", label: "Notas", icon: FileText },
-    { href: "/admin/clientes", label: "Clientes", icon: Building2, adminOnly: true },
-    { href: "/admin/fornecedores", label: "Fornecedores", icon: Truck, adminOnly: true },
-    { href: "/admin/usuarios-nf", label: "Usuarios", icon: Users, adminOnly: true }
+    { href: "/admin/clientes", label: "Clientes", icon: Building2, roles: ["admin", "adm_campanha"] },
+    { href: "/admin/fornecedores", label: "Fornecedores", icon: Truck, roles: ["admin", "adm_campanha"] },
+    { href: "/admin/usuarios-nf", label: "Usuarios", icon: Users, roles: ["admin"] }
   ],
   en: [{ href: "/", label: "Invoices", icon: FileText }]
 };
@@ -30,7 +32,7 @@ export function NfNavbar() {
   const { user, logout } = useAuth();
   const role = useNfRole();
   const lang = langForRole(role);
-  const links = linksByLang[lang].filter((l) => !l.adminOnly || role === "admin");
+  const links = linksByLang[lang].filter((l) => !l.roles || l.roles.includes(role));
 
   return (
     <header className="sticky top-0 z-40 border-b border-primary/30 bg-zinc-950">
