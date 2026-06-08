@@ -91,7 +91,7 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
       fd.append("fee", String(feeNum));
       fd.append("data", data);
       fd.append("proof", file);
-      await apiFetch("/nf/invoices/batch/pay", { method: "POST", body: fd });
+      await apiFetch("/nf/payment-batches", { method: "POST", body: fd });
       toast.success(`${selectedInvoices.length} NF(s) paga(s) em lote.`);
       onPaid();
       onClose();
