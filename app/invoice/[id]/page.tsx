@@ -19,7 +19,7 @@ import { ApprovalBadge, OverdueBadge } from "@/components/nf/approval-badge";
 import { InvoiceEvents } from "@/components/nf/invoice-events";
 import { InvoiceEditModal } from "@/components/nf/invoice-edit-modal";
 import { useAuth } from "@/lib/auth-context";
-import { useNfRole, langForRole } from "@/lib/nf-role-context";
+import { useNfRole, useCan, langForRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
 import { fmtCurrency, fmtDate, fmtDateTime, fmtRefMonth } from "@/lib/i18n";
@@ -41,6 +41,7 @@ export default function InvoiceDetailPage({ params }: { params: { id: string } }
 
 function InvoiceDetail({ id }: { id: string }) {
   const role = useNfRole();
+  const can = useCan();
   const lang = langForRole(role);
   const router = useRouter();
   const toast = useToast();
@@ -359,12 +360,25 @@ function InvoiceDetail({ id }: { id: string }) {
   // So mostra botao "Aprovar" se: status em_analise + meu papel + EU ainda nao aprovei.
   // (Bug 1: antes checava so `!admApproved`, mas mesmo com `_at` setado a UI
   // permanecia mostrando o botao em alguns casos. Agora dupla-checa por `youApproved`.)
+  // Permissao de decisao (aprovar/recusar) agora e dinamica via RBAC: a key
+  // `nf.notas.approve` (toggle em /admin/papeis) controla quem ve as acoes.
+  // O papel ainda define QUAL slot da dupla aprovacao e preenchido
+  // (adm_campanha -> slot adm; admin -> slot admin), mas a liberacao da acao
+  // em si passa por `can("nf.notas.approve")`.
+  const canDecide = can("nf.notas.approve");
   const canApproveAsAdm =
-    role === "adm_campanha" && isEmAnalise && !admApproved && !youApprovedAsAdm;
+    canDecide &&
+    role === "adm_campanha" &&
+    isEmAnalise &&
+    !admApproved &&
+    !youApprovedAsAdm;
   const canApproveAsAdmin =
-    role === "admin" && isEmAnalise && !adminApproved && !youApprovedAsAdmin;
-  const canReject =
-    (role === "admin" || role === "adm_campanha") && isEmAnalise;
+    canDecide &&
+    role === "admin" &&
+    isEmAnalise &&
+    !adminApproved &&
+    !youApprovedAsAdmin;
+  const canReject = canDecide && isEmAnalise;
   const canPay = role === "admin" && isAprovada;
 
   // Admin completando a dupla = ele aprova quando adm_campanha ja aprovou.
