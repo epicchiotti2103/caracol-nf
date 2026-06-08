@@ -62,6 +62,8 @@ export interface Invoice {
   // Caminho no storage do comprovante de pagamento (PNG/JPEG/PDF).
   // Backend ainda em deploy — frontend trata `undefined`/`null` como "sem comprovante".
   paid_proof_path?: string | null;
+  // Lote de pagamento (várias NFs quitadas numa transferência, 1 comprovante)
+  batch_payment_id?: string | null;
   created_at: string;
   updated_at?: string | null;
   // Derivados pelo backend (novos em GET /nf/invoices*)

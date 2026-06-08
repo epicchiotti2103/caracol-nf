@@ -18,9 +18,11 @@ import {
   Inbox,
   ChevronRight,
   X,
-  Filter
+  Filter,
+  Layers
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
+import { BatchPayModal } from "@/components/nf/batch-pay-modal";
 import { StatusBadge } from "@/components/status-badge";
 import { ApprovalBadge, OverdueBadge } from "@/components/nf/approval-badge";
 import { DashboardChips } from "@/components/nf/dashboard-chips";
@@ -115,6 +117,7 @@ function HomeContent() {
   const [referenceMonth, setReferenceMonth] = useState<string>(initialRefMonth);
   const [assigneeId, setAssigneeId] = useState<string>(initialAssignee);
   const [mineOnly, setMineOnly] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
 
   const showAssignedBanner =
     (role === "admin" || role === "adm_campanha") && pendingAssignedCount > 0;
@@ -341,6 +344,15 @@ function HomeContent() {
               {tr("newInvoice", "en")}
             </Link>
           )}
+          {role === "admin" && view === "pagar" && (
+            <button
+              onClick={() => setBatchOpen(true)}
+              className="flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-surface/80"
+            >
+              <Layers className="h-4 w-4" />
+              Pagar em lote
+            </button>
+          )}
           {role !== "publisher" && (
             <Link
               href="/invoice/new"
@@ -352,6 +364,8 @@ function HomeContent() {
           )}
         </div>
       </div>
+
+      {batchOpen && <BatchPayModal onClose={() => setBatchOpen(false)} onPaid={load} />}
 
       {/* Linha de filtros (apenas para admin/adm_campanha) */}
       {showFilters && (

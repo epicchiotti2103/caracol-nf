@@ -59,6 +59,28 @@ function InvoiceDetail({ id }: { id: string }) {
   const [proofError, setProofError] = useState("");
   // Bump usado pra refrescar a timeline apos acoes
   const [eventsRefreshKey, setEventsRefreshKey] = useState(0);
+  // Lote de pagamento (quais NFs dividem o mesmo comprovante)
+  const [batchSiblings, setBatchSiblings] = useState<Invoice[] | null>(null);
+
+  useEffect(() => {
+    const bid = invoice?.batch_payment_id;
+    if (!bid) {
+      setBatchSiblings(null);
+      return;
+    }
+    let active = true;
+    (async () => {
+      try {
+        const res: { invoices?: Invoice[] } = await apiFetch(`/nf/payment-batches/${bid}`);
+        if (active) setBatchSiblings(res.invoices ?? null);
+      } catch {
+        if (active) setBatchSiblings(null);
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [invoice?.batch_payment_id]);
 
   // Painel de notas
   const [notesSupplier, setNotesSupplier] = useState("");
@@ -601,6 +623,32 @@ function InvoiceDetail({ id }: { id: string }) {
                 {t.downloadProof}
               </button>
             )}
+          </div>
+        )}
+
+        {invoice.batch_payment_id && batchSiblings && batchSiblings.length > 1 && (
+          <div className="border-t border-border pt-4">
+            <p className="text-sm font-medium text-foreground">
+              {lang === "pt"
+                ? "Pago em lote — mesmo comprovante destas NFs:"
+                : "Paid in a batch — same proof for these invoices:"}
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {batchSiblings.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => s.id !== id && router.push(`/invoice/${s.id}`)}
+                  className={`rounded-md border px-2 py-1 text-xs font-mono transition-colors ${
+                    s.id === id
+                      ? "border-primary/50 bg-primary/10 text-primary"
+                      : "border-border text-muted hover:text-foreground"
+                  }`}
+                  title={s.supplier_name || undefined}
+                >
+                  {s.invoice_number}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
