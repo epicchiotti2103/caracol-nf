@@ -23,7 +23,8 @@ CRUD de invoices funcionando, com upload de PDF, papeis intra-NF (publisher / ad
 - `/invoice/[id]` — detalhe com auditoria das 2 aprovacoes + pagamento, badges `2/2 aprovacoes` e `Vencida ha N dias`, acoes condicionais por papel (incluindo modal de "designar pagador" quando admin completa a dupla), painel de notas e **timeline de eventos** (`GET /nf/invoices/{id}/events`)
 - `/admin/clientes` — cadastro de clientes (entidades que recebem NF a receber). Apenas admin cria/edita; admin e adm_campanha visualizam. CRUD via `/clients`.
 - `/admin/fornecedores` — cadastro de fornecedores (entidades que emitem NF a pagar). Mesma UI/permissoes dos clientes; CRUD via `/suppliers`. **Toda NF a pagar aponta pra um fornecedor cadastrado** — "publisher" e "usuario" viraram atributos do fornecedor: checkbox **"E publisher?"** (`is_publisher`) e dropdown **"Usuario linkado"** (`user_id`, opcional, lista `GET /nf/users` com nome + email e opcao "— nenhum —", pra fornecedores que tem login no sistema). O cadastro separa **nome fantasia** (`name`, obrigatorio — exibido na lista de fornecedores e como `supplier_name` na lista de NFs) de **razao social / nome real** (`legal_name`, opcional — usado na hora de pagar). O modal de cadastro/edicao tem uma secao colapsavel **"Dados de pagamento (HelmBank)"** com os campos bancarios `pay_*` (todos opcionais): tipo de transferencia (Internacional/SWIFT ou Domestica/Routing-ABA), conta/IBAN, banco beneficiario + codigo (label dinamico SWIFT vs Routing/ABA), banco correspondente + SWIFT (so internacional), pais/cidade/endereco/telefone do beneficiario, e instrucoes de pagamento (texto livre pra colar a remessa do email). No detalhe da NF a Pagar (`/invoice/[id]`), quando a NF tem `supplier_id`, admin/adm_campanha veem um bloco read-only "Dados de pagamento" com esses campos preenchidos (texto `select-all` pra facilitar copiar na hora de pagar). A primeira linha do bloco mostra a **Razao social / Beneficiario** com fallback `legal_name ?? name`.
-- `/admin/usuarios-nf` — gestao de papeis intra-NF (apenas admin)
+- `/admin/usuarios-nf` — atribuicao de papel intra-NF a cada usuario (gate `nf.usuarios.view`/`nf.usuarios.manage`). Header tem botao **Papeis** pra `/admin/papeis`.
+- `/admin/papeis` — matriz papel×permissao (grade com linhas agrupadas por `group` do catalogo, colunas = papeis). Toggles editaveis por papel; coluna **Admin** e read-only (god-mode, tudo liberado). Carrega `GET /perms/nf/matrix`, salva via `PUT /perms/nf/matrix`. Gate `nf.usuarios.manage`.
 
 No dashboard `/`, admins e adm_campanha veem **3 chips no topo** (pendentes / a pagar / vencidas). Cada chip abre um hovercard (com fallback de clique no mobile) listando ate 5 NFs do balde + link "ver todas" que aplica o filtro. Admin tambem ve 3 stat cards abaixo dos chips — os de **A pagar** e **Pagas (30d)** mostram total em **R$** e **US$** em duas linhas (`to_pay_brl`/`to_pay_usd`, `paid_last_30d_brl`/`paid_last_30d_usd`).
 
@@ -37,9 +38,19 @@ Sao definidos numa tabela do backend e expostos por `GET /api/v1/nf/me/role`. O 
 |---|---|---|
 | `publisher` | Criar e ver as proprias NFs | Ingles |
 | `adm_campanha` | Ver todas NFs, aprovar/recusar `em_analise` | Portugues |
-| `admin` | Tudo do adm_campanha + marcar `aprovada` como `paga` + recusa pos-aprovacao + gerir papeis | Portugues |
+| `admin` | Tudo do adm_campanha + marcar `aprovada` como `paga` + recusa pos-aprovacao + gerir papeis/permissoes | Portugues |
 
 Sem papel definido, o gate mostra "Seu perfil no NF nao foi configurado".
+
+## RBAC dinamico (permissoes por papel)
+
+O gating de UI nao e mais hardcoded por papel — vem de **permissoes** resolvidas no bootstrap. O `BootstrapGate` chama `GET /api/v1/perms/nf/me` (`{ app, role, permissions:[keys] }`) junto com o role e injeta tudo no `NfRoleProvider`. O context expoe `useCan()` -> `can(key): boolean` (**admin = god-mode, sempre `true`**), usado por navbar e paginas.
+
+Keys atuais: `nf.clientes.view`, `nf.clientes.manage`, `nf.fornecedores.view`, `nf.fornecedores.manage`, `nf.usuarios.view`, `nf.usuarios.manage`, `nf.notas.approve`.
+
+**Graceful degradation:** se `/perms/nf/me` falhar (backend de perms ainda nao deployado), o gate cai num fallback seguro derivado do papel (`fallbackPermsForRole` em `bootstrap-gate.tsx`): admin = tudo, adm_campanha = clientes+fornecedores (view/manage) + approve, publisher = nenhuma. Isso evita travar a UI antes do backend estar no ar.
+
+A matriz papel×permissao e editavel por admin em `/admin/papeis` (`GET`/`PUT /perms/nf/matrix`).
 
 ## Workflow de status (aprovacao dupla)
 
@@ -91,8 +102,9 @@ Na listagem e no detalhe da NF, a coluna/linha de origem mostra `supplier_name` 
 - **Acesso ao app NF** e validado pelo `BootstrapGate` (`components/nf/bootstrap-gate.tsx`):
   1. Apos auth, chama `GET /api/v1/hub/me/apps`. Se nao tem slug `nf` -> redireciona pra `app.aeobr.com.br?reason=no_access_nf`.
   2. Se tem app, chama `GET /api/v1/nf/me/role`. Se a resposta for `role: null` -> tela "Sem perfil no NF, fale com admin".
-  3. Caso ok, expoe o papel via `useNfRole()` pra arvore inteira.
-- Cache em memoria por sessao, limpo no logout.
+  3. Em seguida chama `GET /api/v1/perms/nf/me` pra resolver as permissoes do papel (com fallback seguro derivado do role se o endpoint falhar — ver "RBAC dinamico").
+  4. Caso ok, expoe papel + permissoes via `useNfRole()` / `useCan()` pra arvore inteira.
+- Cache em memoria por sessao (papel + contador + permissoes), limpo no logout.
 
 ## Como rodar (local)
 

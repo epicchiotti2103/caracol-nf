@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { SupplierEditModal } from "@/components/nf/supplier-edit-modal";
-import { useNfRole } from "@/lib/nf-role-context";
+import { useCan } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
 import type { Supplier, ClientEntity } from "@/types";
@@ -31,7 +31,7 @@ export default function FornecedoresPage() {
 }
 
 function FornecedoresContent() {
-  const role = useNfRole();
+  const can = useCan();
   const router = useRouter();
   const toast = useToast();
 
@@ -47,15 +47,15 @@ function FornecedoresContent() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Supplier | null>(null);
 
-  const canManage = role === "admin"; // soh admin cria/edita/toggle
-  const canSee = role === "admin" || role === "adm_campanha";
+  const canSee = can("nf.fornecedores.view");
+  const canManage = can("nf.fornecedores.manage");
 
   // Guard de acesso
   useEffect(() => {
-    if (role && !canSee) {
+    if (!canSee) {
       router.replace("/");
     }
-  }, [role, canSee, router]);
+  }, [canSee, router]);
 
   // Debounce da busca (300ms)
   useEffect(() => {
@@ -149,7 +149,7 @@ function FornecedoresContent() {
 
   const filtered = useMemo(() => suppliers, [suppliers]);
 
-  if (role && !canSee) return null;
+  if (!canSee) return null;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">

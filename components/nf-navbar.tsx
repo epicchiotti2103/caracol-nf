@@ -4,20 +4,21 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { useNfRole, langForRole } from "@/lib/nf-role-context";
+import { useNfRole, useCan, langForRole } from "@/lib/nf-role-context";
 import { HUB_URL } from "@/lib/config";
 import { Building2, FileText, LogOut, ArrowLeft, ShieldCheck, Truck, User, Users } from "lucide-react";
-import type { NfRole } from "@/types";
+import type { NfPermKey } from "@/types";
 
-// roles: se omitido, link e visivel para todos os papeis do idioma
-type LinkDef = { href: string; label: string; icon: any; roles?: NfRole[] };
+// perm: key de permissão exigida pra ver o link (gating dinâmico via `can`).
+// Se omitido, link e visivel para todos os papeis do idioma.
+type LinkDef = { href: string; label: string; icon: any; perm?: NfPermKey };
 
 const linksByLang: Record<"pt" | "en", LinkDef[]> = {
   pt: [
     { href: "/", label: "Notas", icon: FileText },
-    { href: "/admin/clientes", label: "Clientes", icon: Building2, roles: ["admin", "adm_campanha"] },
-    { href: "/admin/fornecedores", label: "Fornecedores", icon: Truck, roles: ["admin", "adm_campanha"] },
-    { href: "/admin/usuarios-nf", label: "Usuarios", icon: Users, roles: ["admin"] }
+    { href: "/admin/clientes", label: "Clientes", icon: Building2, perm: "nf.clientes.view" },
+    { href: "/admin/fornecedores", label: "Fornecedores", icon: Truck, perm: "nf.fornecedores.view" },
+    { href: "/admin/usuarios-nf", label: "Usuarios", icon: Users, perm: "nf.usuarios.view" }
   ],
   en: [{ href: "/", label: "Invoices", icon: FileText }]
 };
@@ -31,8 +32,9 @@ export function NfNavbar() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const role = useNfRole();
+  const can = useCan();
   const lang = langForRole(role);
-  const links = linksByLang[lang].filter((l) => !l.roles || l.roles.includes(role));
+  const links = linksByLang[lang].filter((l) => !l.perm || can(l.perm));
 
   return (
     <header className="sticky top-0 z-40 border-b border-primary/30 bg-zinc-950">

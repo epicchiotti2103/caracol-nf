@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Loader2, RefreshCw, Search, Users } from "lucide-react";
+import { AlertCircle, Loader2, RefreshCw, Search, ShieldCheck, Users } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { useNfRole } from "@/lib/nf-role-context";
+import { useCan } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
 import type { NfRole, NfUser } from "@/types";
@@ -24,9 +25,12 @@ export default function UsuariosNfPage() {
 }
 
 function UsuariosNfContent() {
-  const role = useNfRole();
+  const can = useCan();
   const router = useRouter();
   const toast = useToast();
+
+  const canSee = can("nf.usuarios.view");
+  const canManage = can("nf.usuarios.manage");
 
   const [users, setUsers] = useState<NfUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,12 +39,12 @@ function UsuariosNfContent() {
   const [tab, setTab] = useState<"sem" | "com">("com");
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  // Admin only
+  // Guard de acesso
   useEffect(() => {
-    if (role !== "admin") {
+    if (!canSee) {
       router.replace("/");
     }
-  }, [role, router]);
+  }, [canSee, router]);
 
   const load = async () => {
     setLoading(true);
@@ -57,9 +61,9 @@ function UsuariosNfContent() {
   };
 
   useEffect(() => {
-    if (role === "admin") load();
+    if (canSee) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role]);
+  }, [canSee]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -92,7 +96,7 @@ function UsuariosNfContent() {
     }
   };
 
-  if (role !== "admin") return null;
+  if (!canSee) return null;
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -106,14 +110,24 @@ function UsuariosNfContent() {
             Defina quem e publisher, adm. de campanha ou admin no NF.
           </p>
         </div>
-        <button
-          onClick={load}
-          disabled={loading}
-          className="rounded-lg border border-border bg-surface p-2 text-muted transition-colors hover:bg-surface/80 disabled:opacity-50"
-          title="Atualizar"
-        >
-          <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-        </button>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/papeis"
+            className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3.5 py-2 text-sm font-medium text-muted transition-colors hover:bg-surface/80 hover:text-foreground"
+            title="Editar a matriz de permissoes por papel"
+          >
+            <ShieldCheck className="h-4 w-4" />
+            Papeis
+          </Link>
+          <button
+            onClick={load}
+            disabled={loading}
+            className="rounded-lg border border-border bg-surface p-2 text-muted transition-colors hover:bg-surface/80 disabled:opacity-50"
+            title="Atualizar"
+          >
+            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -206,7 +220,7 @@ function UsuariosNfContent() {
                           const v = e.target.value;
                           changeRole(u.id, v ? (v as NfRole) : null);
                         }}
-                        disabled={busyId === u.id}
+                        disabled={busyId === u.id || !canManage}
                         className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary/50 disabled:opacity-50"
                       >
                         <option value="">— sem papel —</option>
@@ -218,7 +232,7 @@ function UsuariosNfContent() {
                       </select>
                     </td>
                     <td className="px-5 py-4">
-                      {u.nf_role && (
+                      {u.nf_role && canManage && (
                         <button
                           onClick={() => changeRole(u.id, null)}
                           disabled={busyId === u.id}

@@ -12,6 +12,9 @@ export type RoleCache = {
   userId: string;
   role: NfRole | null;
   pendingAssignedCount: number;
+  // Permissões resolvidas pro papel atual (GET /perms/nf/me). Quando o backend
+  // de perms não estiver no ar, vem de um fallback derivado do role (ver gate).
+  permissions: string[];
 };
 
 let roleCache: RoleCache | null = null;

@@ -45,7 +45,10 @@ caracol-nf/
       new/page.tsx               Form de cadastro (bilingual + upload PDF)
       [id]/page.tsx              Detalhe + acoes (aprovar/recusar/pagar)
     admin/
-      usuarios-nf/page.tsx       Gestao de papeis intra-NF (admin only)
+      clientes/page.tsx          Cadastro de clientes (gate nf.clientes.*)
+      fornecedores/page.tsx      Cadastro de fornecedores (gate nf.fornecedores.*)
+      usuarios-nf/page.tsx       Atribuicao de papel por usuario (gate nf.usuarios.*) + botao "Papeis"
+      papeis/page.tsx            Matriz papel x permissao (GET/PUT /perms/nf/matrix)
   components/
     app-shell.tsx                Layout com navbar
     nf-navbar.tsx                Navbar unificado, adapta conforme papel
@@ -60,9 +63,10 @@ caracol-nf/
     auth-context.tsx             Sessao + SSO (replicado nos 3 apps)
     config.ts                    API_BASE_URL, HUB_URL
     toast-context.tsx            Toasts globais
-    nf-role-context.tsx          Papel intra-NF + helper langForRole
+    nf-role-context.tsx          Papel intra-NF + permissoes (useCan) + langForRole
+    nf-role-cache.ts             Cache em memoria (papel + contador + permissoes)
     i18n.ts                      Strings bilingual + formatadores
-  types/index.ts                 Invoice (com assignee), InvoiceStatus, NfRole, NfUser, DashboardSummary, MeRoleResponse
+  types/index.ts                 Invoice (com assignee), InvoiceStatus, NfRole, NfUser, DashboardSummary, MeRoleResponse, MePermsResponse, PermsMatrixResponse, NfPermKey
   middleware.ts                  Redireciona pra /login se nao autenticado
 ```
 
@@ -89,6 +93,9 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `GET /nf/dashboard/pending-approvals` | `/to-pay` | `/overdue` — listas curtas (ate 10 itens) com `{invoice_id, invoice_number, fornecedor, valor, moeda?, aguarda?, pagador?, dias_atraso?}` pra preview do hovercard dos chips
 - `GET /nf/users` — lista users com `nf_role` (admin)
 - `PUT /nf/users/{user_id}/role` — `{role: NfRole | null}` (admin)
+- `GET /perms/nf/me` — `{app:"nf", role, permissions:[keys]}` — permissoes do papel do user logado. Consumido pelo `BootstrapGate` no bootstrap; alimenta `useCan()`. Se falhar, gate usa fallback derivado do role (graceful degradation).
+- `GET /perms/nf/matrix` — (admin) `{roles:[...], catalog:[{key,label,group}], matrix:{role:{key:bool}}}`. Consumido por `/admin/papeis`.
+- `PUT /perms/nf/matrix` — (admin) body `{matrix:{role:{key:bool}}}`. Salva a matriz; admin nao vai no body (god-mode). Retorna a matriz canonica.
 - `GET /clients` — lista clientes (entidades que recebem NF a receber). Filtros `active` (default `true`), `entity`, `q`. Retorna `{items:[...]}`. `GET /clients/{id}`, `POST /clients`, `PATCH /clients/{id}`, `PATCH /clients/{id}/toggle-active`. Consumido por `/admin/clientes`.
 - `GET /suppliers` — espelha `/clients` pra fornecedores (entidades que emitem NF a pagar). Mesmos filtros e shape `{items:[...]}`. `GET /suppliers/{id}`, `POST /suppliers`, `PATCH /suppliers/{id}`, `PATCH /suppliers/{id}/toggle-active`. Consumido por `/admin/fornecedores` e pelos selects de fornecedor em `/invoice/new` e no modal de edicao. **Modelo de fornecedor central**: o supplier carrega `is_publisher` (bool — marca fornecedor publisher) e `user_id` (string|null — usuario do sistema linkado a esse fornecedor; quando o usuario logado bate, o `POST /nf/invoices` amarra a NF nesse supplier automaticamente). O modal `supplier-edit-modal.tsx` envia `is_publisher` (checkbox) e `user_id` (dropdown de `GET /nf/users`, opcao "— nenhum —") no POST/PATCH. O supplier separa **nome fantasia** (`name`, obrigatorio — exibido na lista e como `supplier_name` na lista de NFs) de **razao social** (`legal_name`, opcional — nome real usado pra pagamento; frontend faz fallback `legal_name ?? name` no bloco de pagamento do detalhe da NF). Alem das colunas cadastrais, o supplier carrega **dados bancarios opcionais (HelmBank)** com prefixo `pay_*`: `pay_wire_type` (`'domestic'|'international'`), `pay_account_number` (conta ou IBAN), `pay_beneficiary_bank_name`, `pay_beneficiary_bank_code` (Creditor Agent = SWIFT se intl, Routing/ABA se domestic), `pay_correspondent_bank_name`, `pay_correspondent_bank_swift` (banco intermediario, so intl), `pay_creditor_country/city/address/phone`, e `pay_instructions` (texto livre). Todos opcionais — frontend trata ausencia como graceful (backend pode nao ter as colunas ainda). O modal `supplier-edit-modal.tsx` envia esses campos no POST/PATCH; o detalhe da NF (`/invoice/[id]`) busca o supplier via `GET /suppliers/{id}` (so admin/adm_campanha, so se `supplier_id` presente) pra exibir bloco read-only de pagamento.
 
@@ -103,6 +110,18 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 | `admin` | Todas as NFs + dashboard | Sim | Sim (`aprovada` → `paga`) | Portugues |
 
 Admin tambem pode gerir papeis em `/admin/usuarios-nf` via `PUT /nf/users/{id}/role` (passar `role: null` remove o papel).
+
+### RBAC dinamico (permissoes por papel)
+
+O gating de UI **nao e mais hardcoded por papel** — vem de permissoes resolvidas no bootstrap. O `BootstrapGate` chama `GET /perms/nf/me` junto com o role e injeta `permissions:[keys]` no `NfRoleProvider`. O context expoe `useCan()` -> `can(key)`; **admin = god-mode (sempre true)**.
+
+Keys: `nf.clientes.view`, `nf.clientes.manage`, `nf.fornecedores.view`, `nf.fornecedores.manage`, `nf.usuarios.view`, `nf.usuarios.manage`, `nf.notas.approve`.
+
+Pontos de consumo: `nf-navbar.tsx` (links Clientes/Fornecedores/Usuarios gated por `*.view`), `app/admin/clientes` e `fornecedores` (`canSee = *.view`, `canManage = *.manage`), `app/admin/usuarios-nf` (`*.view`/`*.manage`).
+
+**Graceful degradation**: se `/perms/nf/me` falhar, `fallbackPermsForRole` (em `bootstrap-gate.tsx`) deriva permissoes do papel — admin = tudo, adm_campanha = clientes+fornecedores (view/manage) + approve, publisher = nenhuma. Evita travar a UI antes do backend de perms deployar.
+
+A matriz papel x permissao e editada em `/admin/papeis` (`GET`/`PUT /perms/nf/matrix`). Coluna Admin e read-only.
 
 ## Workflow de status (aprovacao dupla)
 
@@ -164,8 +183,9 @@ Mesmo SSO via cookie no dominio raiz `.aeobr.com.br` (igual hub e tracker). Em p
 2. Em `/login` ou quando nao ha `user`, libera direto.
 3. Chama `GET /api/v1/hub/me/apps`. Se nao tem slug `nf` -> tela "sem acesso" + redirect pra `${HUB_URL}?reason=no_access_nf`.
 4. Chama `GET /api/v1/nf/me/role`. Se `role: null` -> tela "perfil do NF nao configurado" com botao Sair.
-5. Se role !== null -> envolve a arvore com `NfRoleProvider` expondo o papel.
-6. Cache em memoria por `userId` (apps + role). Limpo automaticamente quando `user` vira `null` (logout).
+5. Chama `GET /api/v1/perms/nf/me` pra resolver as permissoes do papel. Se falhar, usa `fallbackPermsForRole(role)` (graceful degradation — ver "RBAC dinamico").
+6. Se role !== null -> envolve a arvore com `NfRoleProvider` expondo papel + permissoes (`useCan()`).
+7. Cache em memoria por `userId` (apps + role + permissoes). Limpo automaticamente quando `user` vira `null` (logout).
 
 ## Variaveis de ambiente (Vercel)
 

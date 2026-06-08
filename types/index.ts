@@ -72,6 +72,45 @@ export interface Invoice {
   approvals_pending?: ApprovalSlot[];
 }
 
+// ── RBAC dinâmico (permissões por papel) ───────────────────────────────────
+// Keys de permissão do NF (catálogo conhecido). Mantido como union pra
+// autocomplete em `can(...)`, mas o backend é a fonte de verdade — o catálogo
+// real vem em GET /perms/nf/matrix.
+export type NfPermKey =
+  | "nf.clientes.view"
+  | "nf.clientes.manage"
+  | "nf.fornecedores.view"
+  | "nf.fornecedores.manage"
+  | "nf.usuarios.view"
+  | "nf.usuarios.manage"
+  | "nf.notas.approve";
+
+// Response do GET /api/v1/perms/nf/me
+export interface MePermsResponse {
+  app: string;            // "nf"
+  role: NfRole | string | null;
+  permissions: string[];  // keys liberadas pro papel atual
+}
+
+// Item do catálogo de permissões (GET /perms/nf/matrix)
+export interface PermCatalogItem {
+  key: string;
+  label: string;
+  group: string;
+}
+
+// Response do GET /api/v1/perms/nf/matrix (admin)
+export interface PermsMatrixResponse {
+  roles: string[];                              // papéis editáveis (sem admin)
+  catalog: PermCatalogItem[];
+  matrix: Record<string, Record<string, boolean>>; // role -> { key -> bool }
+}
+
+// Body do PUT /api/v1/perms/nf/matrix (admin)
+export interface PermsMatrixUpdatePayload {
+  matrix: Record<string, Record<string, boolean>>;
+}
+
 // Response do GET /api/v1/nf/me/role
 export interface MeRoleResponse {
   role: NfRole | null;
