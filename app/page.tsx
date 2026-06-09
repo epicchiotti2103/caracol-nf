@@ -44,13 +44,26 @@ import type {
   NfUser
 } from "@/types";
 
-const STATUS_OPTIONS: { value: InvoiceStatus | "todos"; pt: string; en: string }[] = [
-  { value: "todos", pt: "Todos", en: "All" },
+const STATUS_OPTIONS: { value: InvoiceStatus; pt: string; en: string }[] = [
   { value: "em_analise", pt: "Em analise", en: "Under review" },
   { value: "aprovada", pt: "Aprovada", en: "Approved" },
   { value: "paga", pt: "Paga", en: "Paid" },
   { value: "recusada", pt: "Recusada", en: "Rejected" }
 ];
+
+// Default da visao "a pagar" (admin/adm_campanha): Em analise + A pagar (= aprovada).
+const DEFAULT_STATUS_FILTER: InvoiceStatus[] = ["em_analise", "aprovada"];
+
+// Le ?status= da URL: aceita repetido (?status=a&status=b) ou separado por virgula.
+// Retorna apenas valores validos. Lista vazia = sem filtro (mostra todos).
+function parseStatusParam(sp: URLSearchParams | null): InvoiceStatus[] {
+  if (!sp) return [];
+  const valid = new Set(STATUS_OPTIONS.map((o) => o.value));
+  const raw = sp.getAll("status").flatMap((v) => v.split(","));
+  return raw
+    .map((v) => v.trim())
+    .filter((v): v is InvoiceStatus => valid.has(v as InvoiceStatus));
+}
 
 // Opcoes de mes de referencia: ultimos 12 + proximos 3.
 // Format do valor: "YYYY-MM" (alinha com query param `reference_month` do backend).
@@ -103,14 +116,24 @@ function HomeContent() {
   const [nfUsers, setNfUsers] = useState<NfUser[]>([]);
 
   // Filtros (com deep-link via querystring)
-  const initialStatus = (searchParams?.get("status") as InvoiceStatus | "todos") || "todos";
+  // statusFilter e multi-selecao: array vazio = mostra todos (sem filtro).
+  // Default: se vier ?status= na URL, respeita; senao usa o default por papel
+  //   - admin/adm_campanha: Em analise + A pagar (aprovada)
+  //   - publisher: vazio (mostra todas) — pills proprias controlam isso
+  const hasStatusParam = (searchParams?.getAll("status").length || 0) > 0;
+  const isAdminView = role === "admin" || role === "adm_campanha";
+  const initialStatus: InvoiceStatus[] = hasStatusParam
+    ? parseStatusParam(searchParams)
+    : isAdminView
+    ? DEFAULT_STATUS_FILTER
+    : [];
   const initialVencida = searchParams?.get("vencida") === "1";
   const initialDueStart = searchParams?.get("due_date_start") || "";
   const initialDueEnd = searchParams?.get("due_date_end") || "";
   const initialRefMonth = searchParams?.get("reference_month") || "";
   const initialAssignee = searchParams?.get("assignee_id") || "";
 
-  const [statusFilter, setStatusFilter] = useState<InvoiceStatus | "todos">(initialStatus);
+  const [statusFilter, setStatusFilter] = useState<InvoiceStatus[]>(initialStatus);
   const [overdueOnly, setOverdueOnly] = useState<boolean>(initialVencida);
   const [dueDateStart, setDueDateStart] = useState<string>(initialDueStart);
   const [dueDateEnd, setDueDateEnd] = useState<string>(initialDueEnd);
@@ -141,9 +164,17 @@ function HomeContent() {
   // Constroi querystring que vai pros endpoints (backend params: status,
   // due_date_start, due_date_end, reference_month, assignee_id). Apenas server-side;
   // search e overdueOnly continuam client-side.
+  // Toggle de um status no array (multi-selecao)
+  const toggleStatus = (value: InvoiceStatus) => {
+    setStatusFilter((prev) =>
+      prev.includes(value) ? prev.filter((s) => s !== value) : [...prev, value]
+    );
+  };
+
   const serverQuery = useMemo(() => {
     const qs = new URLSearchParams();
-    if (statusFilter !== "todos") qs.set("status", statusFilter);
+    // Backend aceita ?status= repetido (filtra com IN). Mandamos cada um.
+    statusFilter.forEach((s) => qs.append("status", s));
     if (dueDateStart) qs.set("due_date_start", dueDateStart);
     if (dueDateEnd) qs.set("due_date_end", dueDateEnd);
     if (referenceMonth) qs.set("reference_month", referenceMonth);
@@ -156,7 +187,7 @@ function HomeContent() {
   }, [statusFilter, dueDateStart, dueDateEnd, referenceMonth, assigneeId, user?.id]);
 
   const hasActiveFilters =
-    statusFilter !== "todos" ||
+    statusFilter.length > 0 ||
     !!dueDateStart ||
     !!dueDateEnd ||
     !!referenceMonth ||
@@ -215,7 +246,7 @@ function HomeContent() {
   // Sincroniza filtros com query string da URL (sem recarregar)
   useEffect(() => {
     const qs = new URLSearchParams();
-    if (statusFilter !== "todos") qs.set("status", statusFilter);
+    statusFilter.forEach((s) => qs.append("status", s));
     if (overdueOnly) qs.set("vencida", "1");
     if (dueDateStart) qs.set("due_date_start", dueDateStart);
     if (dueDateEnd) qs.set("due_date_end", dueDateEnd);
@@ -231,7 +262,8 @@ function HomeContent() {
 
   const filtered = useMemo(() => {
     return invoices.filter((inv) => {
-      const matchStatus = statusFilter === "todos" || inv.status === statusFilter;
+      const matchStatus =
+        statusFilter.length === 0 || statusFilter.includes(inv.status);
       const q = search.trim().toLowerCase();
       const matchSearch = !q || inv.invoice_number.toLowerCase().includes(q);
       // mineOnly = "NFs em_analise onde MEU papel ainda precisa aprovar"
@@ -278,7 +310,7 @@ function HomeContent() {
 
   // Reseta todos os filtros pro estado default
   const clearFilters = () => {
-    setStatusFilter("todos");
+    setStatusFilter([]);
     setOverdueOnly(false);
     setDueDateStart("");
     setDueDateEnd("");
@@ -426,19 +458,26 @@ function HomeContent() {
               <label className="text-[10px] font-semibold uppercase tracking-wide text-muted">
                 Status
               </label>
-              <select
-                value={statusFilter}
-                onChange={(e) =>
-                  setStatusFilter(e.target.value as InvoiceStatus | "todos")
-                }
-                className="h-9 min-w-[140px] rounded-lg border border-border bg-background px-2 text-[13px] text-foreground outline-none focus:border-primary/50"
-              >
-                {STATUS_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.pt}
-                  </option>
-                ))}
-              </select>
+              <div className="flex h-9 items-center gap-1">
+                {STATUS_OPTIONS.map((opt) => {
+                  const active = statusFilter.includes(opt.value);
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => toggleStatus(opt.value)}
+                      aria-pressed={active}
+                      className={`rounded-lg border px-2.5 py-1.5 text-[12px] font-medium transition-colors ${
+                        active
+                          ? "border-primary bg-primary text-black"
+                          : "border-border bg-background text-muted hover:text-foreground"
+                      }`}
+                    >
+                      {opt.pt}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
 
             {hasActiveFilters && (
@@ -485,14 +524,13 @@ function HomeContent() {
                   onClear={() => setAssigneeId("")}
                 />
               )}
-              {statusFilter !== "todos" && (
+              {statusFilter.map((s) => (
                 <ActivePill
-                  label={`Status: ${
-                    STATUS_OPTIONS.find((o) => o.value === statusFilter)?.pt || statusFilter
-                  }`}
-                  onClear={() => setStatusFilter("todos")}
+                  key={s}
+                  label={`Status: ${STATUS_OPTIONS.find((o) => o.value === s)?.pt || s}`}
+                  onClear={() => toggleStatus(s)}
                 />
-              )}
+              ))}
               {overdueOnly && (
                 <ActivePill
                   label="Apenas vencidas"
@@ -599,15 +637,26 @@ function HomeContent() {
               className="w-full rounded-lg border border-border bg-background py-2 pl-9 pr-3 text-sm text-foreground outline-none focus:border-primary/50"
             />
           </div>
-          {/* Quick filters (status pills) — apenas pra publisher (que nao ve a barra de filtros completa) */}
+          {/* Quick filters (status pills) — apenas pra publisher (que nao ve a barra de filtros completa).
+              Multi-selecao: "All" zera o array (mostra todas); cada status faz toggle. */}
           {!showFilters && (
             <div className="flex flex-wrap items-center gap-1">
+              <button
+                onClick={() => setStatusFilter([])}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                  statusFilter.length === 0
+                    ? "bg-primary text-black"
+                    : "bg-background text-muted hover:text-foreground"
+                }`}
+              >
+                {lang === "pt" ? "Todos" : "All"}
+              </button>
               {STATUS_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
-                  onClick={() => setStatusFilter(opt.value)}
+                  onClick={() => toggleStatus(opt.value)}
                   className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                    statusFilter === opt.value
+                    statusFilter.includes(opt.value)
                       ? "bg-primary text-black"
                       : "bg-background text-muted hover:text-foreground"
                   }`}

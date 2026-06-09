@@ -40,6 +40,8 @@ O detalhe da NF a Pagar (`/invoice/[id]`) exibe a Tag (linha) e um bloco "Campan
 
 No dashboard `/`, admins e adm_campanha veem **3 chips no topo** (pendentes / a pagar / vencidas). Cada chip abre um hovercard (com fallback de clique no mobile) listando ate 5 NFs do balde + link "ver todas" que aplica o filtro. Admin tambem ve 3 stat cards abaixo dos chips — os de **A pagar** e **Pagas (30d)** mostram total em **R$** e **US$** em duas linhas (`to_pay_brl`/`to_pay_usd`, `paid_last_30d_brl`/`paid_last_30d_usd`).
 
+O **filtro de status** da lista (`/`) e **multi-selecao**: da pra marcar varios status juntos (Em analise / Aprovada / Paga / Recusada). Array vazio = mostra todos. Os status selecionados vao na querystring como `?status=` repetido — o backend (`GET /nf/invoices`) ja aceita `status` repetido e filtra com `IN`, entao a paginacao continua server-side (sem truncar). Ao entrar na pagina, admin/adm_campanha ja vem com **Em analise + Aprovada (a pagar)** marcados por padrao; um link com `?status=` na URL sobrescreve o default. Publisher comeca sem filtro (todas) e tem pills proprias (incluindo "Todos") na barra de busca.
+
 A logo Caracol no header e clicavel e volta pro Hub.
 
 ## Papeis intra-NF
