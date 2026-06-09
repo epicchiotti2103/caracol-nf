@@ -110,7 +110,6 @@ function InvoiceDetail({ id }: { id: string }) {
     amount: lang === "pt" ? "Valor" : "Amount",
     dueDate: lang === "pt" ? "Vencimento" : "Due date",
     refMonth: lang === "pt" ? "Mes de referencia" : "Reference month",
-    campaign: lang === "pt" ? "Campanha" : "Campaign",
     publisher: lang === "pt" ? "Fornecedor" : "Supplier",
     submittedBy: lang === "pt" ? "Cadastrado por" : "Submitted by",
     createdAt: lang === "pt" ? "Enviada em" : "Sent at",
@@ -591,10 +590,6 @@ function InvoiceDetail({ id }: { id: string }) {
         />
         <Row label={t.dueDate} value={fmtDate(invoice.due_date, lang)} />
         <Row label={t.refMonth} value={fmtRefMonth(invoice.reference_month, lang)} />
-        <Row
-          label={t.campaign}
-          value={invoice.campaign_name ?? invoice.campaign ?? "—"}
-        />
         {invoice.tag_name && <Row label="Tag" value={invoice.tag_name} />}
         {role !== "publisher" && (
           <Row

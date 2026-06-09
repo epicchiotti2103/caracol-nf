@@ -96,7 +96,9 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `GET /nf/users` — lista users com `nf_role` (admin)
 - `PUT /nf/users/{user_id}/role` — `{role: NfRole | null}` (admin)
 - `GET /nf/tags` — catalogo de tags. `?active=true` filtra so ativas. Retorna `{items: [{id, name, active}]}`. Leitura: admin/adm_campanha. Escrita admin-only: `POST /nf/tags {name}` (retorna a tag), `PATCH /nf/tags/{id} {name?, active?}`, `PATCH /nf/tags/{id}/toggle-active`. Consumido por `/admin/tags` (CRUD) e pelo seletor de tag dos forms (`?active=true`).
-- `GET /campanhas?q=<texto>` — busca de campanhas pro seletor de vinculo (codigo `CMP-NNN` ou nome). Item: `{id, codigo, name, mes_referencia}`. Rota do app **Campanhas** (mesmo backend). Consumido pelo `CampanhaPicker` em `nf-tag-campanha-fields.tsx`.
+- `GET /campanhas?q=<texto>&month=<YYYY-MM>` — busca de campanhas pro seletor de vinculo (codigo `CMP-NNN` ou nome). `q` e `month` sao combinaveis; `month` filtra por mes de referencia pra encurtar a lista. Item: `{id, codigo, name, mes_referencia}`. Rota do app **Campanhas** (mesmo backend). Consumido pelo `CampanhaPicker` em `nf-tag-campanha-fields.tsx`.
+- `GET /campanhas?months_available=1` — retorna `{months: ["YYYY-MM", ...]}` (desc) com os meses de referencia que tem campanha. Popula o seletor de mes de cada linha do `CampanhaPicker`; lista cacheada no nivel do bloco (`NfTagCampanhaFields`), nao rebusca por linha.
+- **Campo legado removido do front**: o `campaign_name` (texto livre "Campanha") nao e mais lido nem enviado pelo frontend (forms criar/editar, detalhe da NF, listas, batch-pay). Substituido pelo bloco estruturado de campanhas vinculadas. A coluna segue no backend como **deprecated** so pra NFs historicas (o evento de historico `campaign_name` em `invoice-events.tsx` ainda e renderizado pra edicoes antigas).
 - **Tag + campanhas em invoice/receivable**: o `GET` de invoice e receivable agora carrega `tag_id`, `tag_name` e `campanhas: [{campanha_id, codigo, name, mes_referencia, valor_alocado}]`. O `POST` (multipart) aceita `tag_id` (Form) e `campanhas_json` (Form, string JSON `[{campanha_id, valor}]`). O `PATCH` (JSON) aceita `tag_id` e `campanhas: [{campanha_id, valor}]` (REPLACE total dos vinculos — frontend so envia quando o conjunto muda). Vinculos vivem em `nf_invoice_campanhas` / `nf_receivable_campanhas` no backend.
 - `GET /perms/nf/me` — `{app:"nf", role, permissions:[keys]}` — permissoes do papel do user logado. Consumido pelo `BootstrapGate` no bootstrap; alimenta `useCan()`. Se falhar, gate usa fallback derivado do role (graceful degradation).
 - `GET /perms/nf/matrix` — (admin) `{roles:[...], catalog:[{key,label,group}], matrix:{role:{key:bool}}}`. Consumido por `/admin/papeis`.
@@ -229,7 +231,7 @@ NEXT_PUBLIC_HUB_URL=https://app.aeobr.com.br
 - [x] Marcar NF como paga exige **comprovante** (modal de upload PNG/JPEG/PDF max 10MB → multipart pra `POST /pay`); detalhe exibe botao "Baixar comprovante" quando `paid_proof_path` esta setado (consome `GET /nf/invoices/{id}/proof`)
 - [x] Gestao de papeis intra-NF (`/admin/usuarios-nf`)
 - [x] Logo Caracol clicavel volta pro Hub
-- [ ] Cadastro de campanhas como entidade propria (hoje e texto livre)
+- [x] Campanhas como entidade propria: NF vincula campanhas via bloco estruturado (busca por mes + texto, valor por campanha). Campo texto livre `campaign_name` removido do front (deprecated no backend)
 - [ ] Integracao com SEFAZ (futuro)
 - [ ] Notificacoes (futuro)
 

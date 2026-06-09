@@ -166,7 +166,6 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
                         </p>
                         <p className="text-xs text-muted">
                           vence {inv.due_date}
-                          {inv.campaign_name ? ` · ${inv.campaign_name}` : ""}
                         </p>
                       </div>
                       <span className="flex-shrink-0 font-mono text-sm text-foreground">

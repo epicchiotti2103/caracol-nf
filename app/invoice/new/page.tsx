@@ -70,7 +70,6 @@ function NewInvoiceForm() {
   const [moeda, setMoeda] = useState<"BRL" | "USD">("BRL");
   const [dueDate, setDueDate] = useState("");
   const [refMonth, setRefMonth] = useState(""); // YYYY-MM
-  const [campaign, setCampaign] = useState("");
   const [pdf, setPdf] = useState<File | null>(null);
 
   // Tag (1 por NF) + vinculo de campanhas (N, cada uma com valor).
@@ -125,7 +124,6 @@ function NewInvoiceForm() {
     amount: lang === "pt" ? "Valor" : "Amount",
     dueDate: lang === "pt" ? "Vencimento" : "Due date",
     refMonth: lang === "pt" ? "Mes de referencia" : "Reference month",
-    campaign: lang === "pt" ? "Campanha" : "Campaign",
     moedaLabel: lang === "pt" ? "Moeda" : "Currency",
     pdfFile: lang === "pt" ? "Arquivo PDF" : "PDF file",
     submit: lang === "pt" ? "Enviar NF" : "Send invoice",
@@ -174,7 +172,6 @@ function NewInvoiceForm() {
     if (isNaN(amt) || amt <= 0) return labels.amountGt0;
     if (!dueDate) return labels.dueDate + " — " + labels.required;
     if (!refMonth) return labels.refMonth + " — " + labels.required;
-    if (!campaign.trim()) return labels.campaign + " — " + labels.required;
     if (pdf && pdf.size > MAX_PDF_MB * 1024 * 1024) return labels.pdfTooBig;
     return null;
   };
@@ -209,7 +206,6 @@ function NewInvoiceForm() {
       // refMonth pode chegar como YYYY-MM; backend espera ISO de primeiro dia do mes
       const refIso = refMonth.length === 7 ? `${refMonth}-01` : refMonth;
       fd.append("reference_month", refIso);
-      fd.append("campaign_name", campaign.trim());
       // Admin/adm_campanha escolhem o fornecedor. Usuario comum/linkado nao
       // manda supplier_id — o backend amarra na entidade do usuario logado.
       if (isAdmin && supplierId) {
@@ -248,7 +244,6 @@ function NewInvoiceForm() {
               setAmount("");
               setDueDate("");
               setRefMonth("");
-              setCampaign("");
               setPdf(null);
               setSupplierId("");
               setMoeda("BRL");
@@ -399,35 +394,22 @@ function NewInvoiceForm() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              {labels.refMonth} <span className="text-primary">*</span>
-            </label>
-            <select
-              value={refMonth}
-              onChange={(e) => setRefMonth(e.target.value)}
-              className={inputCls}
-            >
-              <option value="">{lang === "pt" ? "Selecione o mes" : "Select a month"}</option>
-              {buildRefMonthOptions(lang).map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              {labels.campaign} <span className="text-primary">*</span>
-            </label>
-            <input
-              value={campaign}
-              onChange={(e) => setCampaign(e.target.value)}
-              className={inputCls}
-              placeholder={lang === "pt" ? "Ex: Campanha XYZ" : "e.g. Campaign XYZ"}
-            />
-          </div>
+        <div>
+          <label className="mb-1.5 block text-sm font-medium text-foreground">
+            {labels.refMonth} <span className="text-primary">*</span>
+          </label>
+          <select
+            value={refMonth}
+            onChange={(e) => setRefMonth(e.target.value)}
+            className={inputCls}
+          >
+            <option value="">{lang === "pt" ? "Selecione o mes" : "Select a month"}</option>
+            {buildRefMonthOptions(lang).map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
         </div>
 
         <NfTagCampanhaFields

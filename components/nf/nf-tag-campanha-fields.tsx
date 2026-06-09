@@ -95,6 +95,10 @@ export function NfTagCampanhaFields({
   const [tags, setTags] = useState<NfTag[]>([]);
   const [tagsUnavailable, setTagsUnavailable] = useState(false);
 
+  // Lista de meses de referencia disponiveis (cacheada no nivel do bloco,
+  // compartilhada por todas as linhas — nao rebusca por linha).
+  const [months, setMonths] = useState<string[]>([]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -106,6 +110,24 @@ export function NfTagCampanhaFields({
         if (!cancelled) setTags(items);
       } catch {
         if (!cancelled) setTagsUnavailable(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res: { months?: string[] } = await apiFetch(
+          "/campanhas?months_available=1"
+        );
+        const list = Array.isArray(res?.months) ? res.months : [];
+        if (!cancelled) setMonths(list);
+      } catch {
+        // Degrada: sem meses o picker cai na busca global por texto.
       }
     })();
     return () => {
@@ -211,6 +233,7 @@ export function NfTagCampanhaFields({
                 <CampanhaPicker
                   value={row.campanha_id}
                   label={row.label}
+                  months={months}
                   onSelect={(item) =>
                     updateRow(idx, {
                       campanha_id: item.id,
@@ -253,19 +276,24 @@ export function NfTagCampanhaFields({
 }
 
 /**
- * Campo de busca de campanha com dropdown de resultados (GET /campanhas?q=).
+ * Campo de busca de campanha com dropdown de resultados. Antes da busca, um
+ * seletor de mes de referencia (populado pelo bloco pai) reduz o escopo:
+ * GET /campanhas?month=<YYYY-MM>&q=<texto> (month e q combinaveis).
  * Quando ja existe selecao, mostra o label resolvido com botao pra trocar.
  */
 function CampanhaPicker({
   value,
   label,
+  months,
   onSelect
 }: {
   value: string;
   label?: string;
+  months: string[];
   onSelect: (item: CampanhaSearchItem) => void;
 }) {
   const [open, setOpen] = useState(!value);
+  const [month, setMonth] = useState("");
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [results, setResults] = useState<CampanhaSearchItem[]>([]);
@@ -285,6 +313,7 @@ function CampanhaPicker({
       setLoading(true);
       try {
         const params = new URLSearchParams();
+        if (month) params.set("month", month);
         if (debounced) params.set("q", debounced);
         const res: { items: CampanhaSearchItem[] } | CampanhaSearchItem[] =
           await apiFetch(`/campanhas?${params.toString()}`);
@@ -305,7 +334,7 @@ function CampanhaPicker({
     return () => {
       cancelled = true;
     };
-  }, [debounced, open]);
+  }, [debounced, month, open]);
 
   // Fecha o dropdown ao clicar fora.
   useEffect(() => {
@@ -341,19 +370,37 @@ function CampanhaPicker({
   }
 
   return (
-    <div ref={boxRef} className="relative">
+    <div ref={boxRef} className="relative space-y-2">
+      {months.length > 0 && (
+        <select
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          aria-label="Mes de referencia da campanha"
+          className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
+        >
+          <option value="">Todos os meses</option>
+          {months.map((m) => (
+            <option key={m} value={m}>
+              {formatMesRef(m)}
+            </option>
+          ))}
+        </select>
+      )}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => setOpen(true)}
-          placeholder="Buscar campanha (CMP-001 ou nome)..."
+          placeholder={
+            month
+              ? "Buscar campanha do mes..."
+              : "Buscar campanha (CMP-001 ou nome)..."
+          }
           className="w-full rounded-lg border border-border bg-background py-2.5 pl-9 pr-3 text-sm text-foreground outline-none focus:border-primary/60"
         />
-      </div>
-      {open && (
-        <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-surface shadow-xl">
+        {open && (
+          <div className="absolute z-20 mt-1 max-h-56 w-full overflow-y-auto rounded-lg border border-border bg-surface shadow-xl">
           {loading ? (
             <div className="flex items-center justify-center py-4">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
@@ -381,8 +428,9 @@ function CampanhaPicker({
               </button>
             ))
           )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

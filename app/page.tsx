@@ -751,7 +751,6 @@ function headersFor(role: string): string[] {
       "Amount",
       "Due Date",
       "Reference Month",
-      "Campaign",
       "Status",
       "PDF",
       ""
@@ -762,7 +761,6 @@ function headersFor(role: string): string[] {
     "Valor",
     "Vencimento",
     "Mes Ref",
-    "Campanha",
     "Status",
     "Aprovacoes",
     "Fornecedor",
@@ -833,9 +831,6 @@ function InvoiceRow({
       </td>
       <td className="whitespace-nowrap px-5 py-4 text-muted">
         {fmtRefMonth(invoice.reference_month, lang)}
-      </td>
-      <td className="max-w-[200px] truncate px-5 py-4 text-foreground" title={invoice.campaign_name || invoice.campaign || undefined}>
-        {invoice.campaign_name || invoice.campaign || "—"}
       </td>
       <td className="whitespace-nowrap px-5 py-4">
         <StatusBadge status={invoice.status} lang={lang} />

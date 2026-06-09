@@ -45,17 +45,13 @@ interface Props {
  *
  * Backend: PATCH /api/v1/nf/invoices/{id} (apenas em em_analise, admin ou
  * adm_campanha). Aceita JSON com qualquer subset de
- * {invoice_number, amount, moeda, due_date, reference_month, campaign_name,
- * supplier_id}. Grava 1 evento `invoice_edited` com o diff.
+ * {invoice_number, amount, moeda, due_date, reference_month, supplier_id}.
+ * Grava 1 evento `invoice_edited` com o diff.
  *
  * Frontend manda **so o diff** (campos cujo valor mudou) pra evitar
  * eventos ruidosos. Backend faz double-check do diff antes de gravar.
  */
 export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
-  // Valores normalizados pra comparacao. Backend devolve `campaign_name`,
-  // mas legacy ja teve `campaign` em algumas respostas — leu de ambos.
-  const initialCampaign =
-    invoice.campaign_name ?? invoice.campaign ?? "";
   const initialMoeda = (invoice.moeda || "BRL") as "BRL" | "USD";
   const initialRef = (invoice.reference_month || "").slice(0, 7);
 
@@ -66,7 +62,6 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
   const [moeda, setMoeda] = useState<"BRL" | "USD">(initialMoeda);
   const [dueDate, setDueDate] = useState((invoice.due_date || "").slice(0, 10));
   const [refMonth, setRefMonth] = useState(initialRef);
-  const [campaign, setCampaign] = useState(initialCampaign);
 
   // NF a Pagar sempre aponta pra um fornecedor cadastrado (supplier_id).
   const [supplierId, setSupplierId] = useState(invoice.supplier_id || "");
@@ -137,10 +132,6 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
       // backend aceita date (primeiro dia do mes)
       out.reference_month = `${refMonth}-01`;
     }
-    const trimmedCampaign = campaign.trim();
-    if (trimmedCampaign !== (initialCampaign || "")) {
-      out.campaign_name = trimmedCampaign || null;
-    }
     // Fornecedor — envia so quando muda.
     if (supplierId && supplierId !== invoice.supplier_id) {
       out.supplier_id = supplierId;
@@ -161,14 +152,12 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
     moeda,
     dueDate,
     refMonth,
-    campaign,
     supplierId,
     tagId,
     campanhaLinks,
     initialTagId,
     initialCampanhaPayload,
     invoice,
-    initialCampaign,
     initialMoeda,
     initialRef
   ]);
@@ -320,36 +309,22 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-foreground">
-                  Mes de referencia <span className="text-primary">*</span>
-                </label>
-                <select
-                  value={refMonth}
-                  onChange={(e) => setRefMonth(e.target.value)}
-                  className={inputCls}
-                >
-                  <option value="">Selecione</option>
-                  {buildRefMonthOptions().map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-foreground">
-                  Campanha
-                </label>
-                <input
-                  value={campaign}
-                  onChange={(e) => setCampaign(e.target.value)}
-                  className={inputCls}
-                  placeholder="Ex: Campanha XYZ"
-                />
-              </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-foreground">
+                Mes de referencia <span className="text-primary">*</span>
+              </label>
+              <select
+                value={refMonth}
+                onChange={(e) => setRefMonth(e.target.value)}
+                className={inputCls}
+              >
+                <option value="">Selecione</option>
+                {buildRefMonthOptions().map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <NfTagCampanhaFields
