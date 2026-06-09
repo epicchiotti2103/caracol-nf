@@ -20,6 +20,7 @@ import {
   draftsToPayload,
   type CampanhaLinkDraft
 } from "@/components/nf/nf-tag-campanha-fields";
+import { ConciliacaoPanel } from "@/components/nf/conciliacao-panel";
 import type { Supplier } from "@/types";
 
 const MAX_PDF_MB = 10;
@@ -420,6 +421,14 @@ function NewInvoiceForm() {
           totalNf={parseFloat((amount || "").replace(",", ".")) || undefined}
           moeda={moeda}
         />
+
+        {isAdmin && (
+          <ConciliacaoPanel
+            supplierId={supplierId}
+            moeda={moeda}
+            campanhas={campanhaLinks}
+          />
+        )}
 
         <div>
           <label className="mb-1.5 block text-sm font-medium text-foreground">

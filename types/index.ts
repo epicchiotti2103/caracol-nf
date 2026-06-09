@@ -395,3 +395,34 @@ export interface NfReceivableSummary {
   received_last_30d_usd: number;
   cancelled_count: number;
 }
+
+// --- Conciliacao NF a pagar vs fechamento de campanha ---
+
+export type ConciliacaoStatusGeral = "ok" | "divergente" | "incompleto";
+
+export type ConciliacaoCampanhaStatus =
+  | "ok"
+  | "divergente"
+  | "sem_fechamento"
+  | "publisher_nao_encontrado";
+
+export interface ConciliacaoCampanha {
+  campanha_id: string;
+  codigo: string | null;
+  name: string | null;
+  mes_referencia: string | null;
+  valor_informado: number;
+  valor_esperado: number;
+  moeda_fechamento: string | null;
+  status: ConciliacaoCampanhaStatus;
+  diff: number;
+}
+
+export interface ConciliacaoResponse {
+  publisher_name: string | null;
+  total_informado: number;
+  total_esperado: number;
+  diff_total: number;
+  status_geral: ConciliacaoStatusGeral;
+  por_campanha: ConciliacaoCampanha[];
+}

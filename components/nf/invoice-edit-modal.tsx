@@ -9,6 +9,7 @@ import {
   draftsToPayload,
   type CampanhaLinkDraft
 } from "@/components/nf/nf-tag-campanha-fields";
+import { ConciliacaoPanel } from "@/components/nf/conciliacao-panel";
 import type { Invoice, Supplier } from "@/types";
 
 const MAX_BR_DATE_LEN = 10;
@@ -334,6 +335,12 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
               onCampanhasChange={setCampanhaLinks}
               totalNf={parseFloat((amount || "").replace(",", ".")) || undefined}
               moeda={moeda}
+            />
+
+            <ConciliacaoPanel
+              supplierId={supplierId}
+              moeda={moeda}
+              campanhas={campanhaLinks}
             />
 
             {error && (
