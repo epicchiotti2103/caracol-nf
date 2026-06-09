@@ -59,13 +59,14 @@ function makeRefMonthOptions(): { value: string; label: string }[] {
  *
  * Permissoes (alinhadas com o backend):
  * - admin: ve tudo, cria, edita, marca recebida, cancela
- * - adm_campanha: ve tudo (read-only nas acoes mutativas)
+ * - adm_campanha: ve tudo, cria (read-only nas demais acoes mutativas: edita/marca/cancela)
  * - publisher: nao deveria nem ter chegado aqui (escondido na tab)
  */
 export function ReceivablesView() {
   const role = useNfRole();
   const toast = useToast();
-  const canManage = role === "admin"; // soh admin cria/edita/marca/cancela
+  const canManage = role === "admin"; // soh admin edita/marca/cancela
+  const canCreate = role === "admin" || role === "adm_campanha"; // admin e adm_campanha criam
   const canSee = role === "admin" || role === "adm_campanha";
 
   const [list, setList] = useState<NfReceivable[]>([]);
@@ -286,7 +287,7 @@ export function ReceivablesView() {
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </button>
-          {canManage && (
+          {canCreate && (
             <button
               onClick={openNew}
               className="flex items-center gap-2 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-black hover:opacity-90"
