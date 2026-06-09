@@ -23,7 +23,7 @@ import { useNfRole, useCan, langForRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
 import { fmtCurrency, fmtDate, fmtDateTime, fmtRefMonth } from "@/lib/i18n";
-import type { Invoice, NfUser, Supplier } from "@/types";
+import type { Invoice, NfCampanhaLink, NfUser, Supplier } from "@/types";
 
 type Action = "approve_adm" | "approve_admin" | "reject" | "pay";
 
@@ -595,6 +595,7 @@ function InvoiceDetail({ id }: { id: string }) {
           label={t.campaign}
           value={invoice.campaign_name ?? invoice.campaign ?? "—"}
         />
+        {invoice.tag_name && <Row label="Tag" value={invoice.tag_name} />}
         {role !== "publisher" && (
           <Row
             label={t.publisher}
@@ -714,6 +715,18 @@ function InvoiceDetail({ id }: { id: string }) {
           </div>
         )}
       </div>
+
+      {/* Campanhas vinculadas (com valor alocado por campanha) */}
+      {role !== "publisher" &&
+        invoice.campanhas &&
+        invoice.campanhas.length > 0 && (
+          <CampanhasBlock
+            campanhas={invoice.campanhas}
+            moeda={invoice.moeda || "BRL"}
+            total={Number(invoice.amount || 0)}
+            lang={lang}
+          />
+        )}
 
       {/* Dados de pagamento do fornecedor (HelmBank) — read-only, so admin/adm */}
       {supplierPay && <SupplierPayBlock supplier={supplierPay} />}
@@ -1196,6 +1209,77 @@ function SupplierPayBlock({ supplier }: { supplier: Supplier }) {
           </p>
         </div>
       )}
+    </div>
+  );
+}
+
+function CampanhasBlock({
+  campanhas,
+  moeda,
+  total,
+  lang
+}: {
+  campanhas: NfCampanhaLink[];
+  moeda: string;
+  total: number;
+  lang: "pt" | "en";
+}) {
+  const soma = campanhas.reduce(
+    (s, c) => s + (Number(c.valor_alocado) || 0),
+    0
+  );
+  const mismatch = total > 0 && Math.abs(soma - total) > 0.005;
+
+  const fmtMes = (s: string | null | undefined) => {
+    if (!s) return "";
+    const ym = s.length >= 7 ? s.slice(0, 7) : s;
+    const [y, m] = ym.split("-");
+    return y && m ? `${m}/${y}` : s;
+  };
+
+  return (
+    <div className="mt-6 rounded-xl border border-border bg-surface p-6">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted">
+        {lang === "pt" ? "Campanhas vinculadas" : "Linked campaigns"}
+      </p>
+      <div className="space-y-2">
+        {campanhas.map((c) => {
+          const codigo = c.codigo ? String(c.codigo) : null;
+          const mes = fmtMes(c.mes_referencia);
+          const label = [codigo, c.name, mes].filter(Boolean).join(" — ");
+          return (
+            <div
+              key={c.campanha_id}
+              className="flex items-baseline justify-between gap-4"
+            >
+              <p className="min-w-0 truncate text-sm text-foreground">
+                {label || c.campanha_id}
+              </p>
+              <p className="flex-shrink-0 text-sm font-medium text-foreground">
+                {fmtCurrency(Number(c.valor_alocado) || 0, moeda, lang)}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-3 flex items-baseline justify-between gap-4 border-t border-border pt-3">
+        <p className="text-xs uppercase tracking-wider text-muted">
+          {lang === "pt" ? "Soma alocada" : "Allocated total"}
+        </p>
+        <p
+          className={`text-sm font-semibold ${
+            mismatch ? "text-amber-400" : "text-foreground"
+          }`}
+        >
+          {fmtCurrency(soma, moeda, lang)}
+          {mismatch && (
+            <span className="ml-2 text-xs font-normal text-amber-400">
+              ({lang === "pt" ? "difere do total" : "differs from total"}:{" "}
+              {fmtCurrency(total, moeda, lang)})
+            </span>
+          )}
+        </p>
+      </div>
     </div>
   );
 }

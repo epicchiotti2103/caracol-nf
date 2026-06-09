@@ -1,6 +1,34 @@
 // Papeis intra-NF (vem de GET /api/v1/nf/me/role)
 export type NfRole = "admin" | "adm_campanha" | "publisher";
 
+// ── Tags (1 por NF) ─────────────────────────────────────────────────────────
+// Catalogo de tags do NF. GET /api/v1/nf/tags?active=true -> { items: NfTag[] }.
+// Escrita (POST/PATCH/toggle-active) e admin-only no backend.
+export interface NfTag {
+  id: string;
+  name: string;
+  active: boolean;
+}
+
+// ── Vinculo NF <-> campanhas (N por NF, cada uma com valor) ──────────────────
+// Vem enriquecido no GET de invoice/receivable (campo `campanhas`).
+export interface NfCampanhaLink {
+  campanha_id: string;
+  codigo?: string | null;
+  name?: string | null;
+  mes_referencia?: string | null;
+  valor_alocado: number | string; // backend serializa Decimal como string
+}
+
+// Item do seletor de campanha. GET /api/v1/campanhas?q=<texto>.
+// Reusa o shape minimo retornado pela busca.
+export interface CampanhaSearchItem {
+  id: string;
+  codigo?: string | null;
+  name?: string | null;
+  mes_referencia?: string | null;
+}
+
 // Status do workflow de invoice
 // em_analise (precisa 2 aprovacoes: adm_campanha + admin) -> aprovada -> paga
 // em_analise -> recusada (com motivo)
@@ -70,6 +98,11 @@ export interface Invoice {
   is_vencida?: boolean;
   days_overdue?: number | null;
   approvals_pending?: ApprovalSlot[];
+  // Tag (1 por NF) + vinculo de campanhas (N, cada uma com valor alocado).
+  // Backend ainda em deploy — opcionais (graceful degradation).
+  tag_id?: string | null;
+  tag_name?: string | null;
+  campanhas?: NfCampanhaLink[];
 }
 
 // ── RBAC dinâmico (permissões por papel) ───────────────────────────────────
@@ -343,6 +376,11 @@ export interface NfReceivable {
   // derivados / join
   client_name?: string | null;
   is_vencida?: boolean;
+  // Tag (1 por NF) + vinculo de campanhas (N, cada uma com valor alocado).
+  // Backend ainda em deploy — opcionais (graceful degradation).
+  tag_id?: string | null;
+  tag_name?: string | null;
+  campanhas?: NfCampanhaLink[];
 }
 
 export interface NfReceivableSummary {

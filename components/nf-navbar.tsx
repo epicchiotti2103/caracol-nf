@@ -6,19 +6,28 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useNfRole, useCan, langForRole } from "@/lib/nf-role-context";
 import { HUB_URL } from "@/lib/config";
-import { Building2, FileText, LogOut, ArrowLeft, ShieldCheck, Truck, User, Users } from "lucide-react";
+import { Building2, FileText, LogOut, ArrowLeft, ShieldCheck, Tag, Truck, User, Users } from "lucide-react";
 import type { NfPermKey } from "@/types";
 
 // perm: key de permissão exigida pra ver o link (gating dinâmico via `can`).
 // Se omitido, link e visivel para todos os papeis do idioma.
-type LinkDef = { href: string; label: string; icon: any; perm?: NfPermKey };
+// adminOnly: link visivel apenas pro papel admin (gating estatico — usado em
+// telas sem perm key dedicada, ex: catalogo de tags, que e admin-only).
+type LinkDef = {
+  href: string;
+  label: string;
+  icon: any;
+  perm?: NfPermKey;
+  adminOnly?: boolean;
+};
 
 const linksByLang: Record<"pt" | "en", LinkDef[]> = {
   pt: [
     { href: "/", label: "Notas", icon: FileText },
     { href: "/admin/clientes", label: "Clientes", icon: Building2, perm: "nf.clientes.view" },
     { href: "/admin/fornecedores", label: "Fornecedores", icon: Truck, perm: "nf.fornecedores.view" },
-    { href: "/admin/usuarios-nf", label: "Usuarios", icon: Users, perm: "nf.usuarios.view" }
+    { href: "/admin/usuarios-nf", label: "Usuarios", icon: Users, perm: "nf.usuarios.view" },
+    { href: "/admin/tags", label: "Tags", icon: Tag, adminOnly: true }
   ],
   en: [{ href: "/", label: "Invoices", icon: FileText }]
 };
@@ -34,7 +43,9 @@ export function NfNavbar() {
   const role = useNfRole();
   const can = useCan();
   const lang = langForRole(role);
-  const links = linksByLang[lang].filter((l) => !l.perm || can(l.perm));
+  const links = linksByLang[lang].filter(
+    (l) => (!l.perm || can(l.perm)) && (!l.adminOnly || role === "admin")
+  );
 
   return (
     <header className="sticky top-0 z-40 border-b border-primary/30 bg-zinc-950">

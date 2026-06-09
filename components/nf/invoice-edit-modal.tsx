@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import {
+  NfTagCampanhaFields,
+  campanhaLinksToDrafts,
+  draftsToPayload,
+  type CampanhaLinkDraft
+} from "@/components/nf/nf-tag-campanha-fields";
 import type { Invoice, Supplier } from "@/types";
 
 const MAX_BR_DATE_LEN = 10;
@@ -64,6 +70,17 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
 
   // NF a Pagar sempre aponta pra um fornecedor cadastrado (supplier_id).
   const [supplierId, setSupplierId] = useState(invoice.supplier_id || "");
+
+  // Tag + campanhas. Snapshot inicial pra detectar mudanca relacional.
+  const initialTagId = invoice.tag_id || "";
+  const [tagId, setTagId] = useState(initialTagId);
+  const initialCampanhaPayload = useMemo(
+    () => JSON.stringify(draftsToPayload(campanhaLinksToDrafts(invoice.campanhas))),
+    [invoice.campanhas]
+  );
+  const [campanhaLinks, setCampanhaLinks] = useState<CampanhaLinkDraft[]>(() =>
+    campanhaLinksToDrafts(invoice.campanhas)
+  );
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
@@ -128,6 +145,15 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
     if (supplierId && supplierId !== invoice.supplier_id) {
       out.supplier_id = supplierId;
     }
+    // Tag — envia so quando muda (string vazia => desvincula => null).
+    if (tagId !== initialTagId) {
+      out.tag_id = tagId || null;
+    }
+    // Campanhas — relacional (REPLACE total). Envia so quando o conjunto muda.
+    const campanhaPayload = draftsToPayload(campanhaLinks);
+    if (JSON.stringify(campanhaPayload) !== initialCampanhaPayload) {
+      out.campanhas = campanhaPayload;
+    }
     return out;
   }, [
     invoiceNumber,
@@ -137,6 +163,10 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
     refMonth,
     campaign,
     supplierId,
+    tagId,
+    campanhaLinks,
+    initialTagId,
+    initialCampanhaPayload,
     invoice,
     initialCampaign,
     initialMoeda,
@@ -321,6 +351,15 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
                 />
               </div>
             </div>
+
+            <NfTagCampanhaFields
+              tagId={tagId}
+              onTagChange={setTagId}
+              campanhas={campanhaLinks}
+              onCampanhasChange={setCampanhaLinks}
+              totalNf={parseFloat((amount || "").replace(",", ".")) || undefined}
+              moeda={moeda}
+            />
 
             {error && (
               <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">

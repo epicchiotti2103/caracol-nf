@@ -3,6 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { FileUp, Loader2, Upload, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import {
+  NfTagCampanhaFields,
+  campanhaLinksToDrafts,
+  draftsToPayload,
+  type CampanhaLinkDraft
+} from "@/components/nf/nf-tag-campanha-fields";
 import type {
   Client,
   ClientEntity,
@@ -75,6 +81,17 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
   const [description, setDescription] = useState(receivable?.description || "");
   const [notesInternal, setNotesInternal] = useState(
     receivable?.notes_internal || ""
+  );
+
+  // Tag + campanhas. Snapshot inicial pra detectar mudanca relacional no PATCH.
+  const initialTagId = receivable?.tag_id || "";
+  const [tagId, setTagId] = useState(initialTagId);
+  const initialCampanhaPayload = useMemo(
+    () => JSON.stringify(draftsToPayload(campanhaLinksToDrafts(receivable?.campanhas))),
+    [receivable?.campanhas]
+  );
+  const [campanhaLinks, setCampanhaLinks] = useState<CampanhaLinkDraft[]>(() =>
+    campanhaLinksToDrafts(receivable?.campanhas)
   );
 
   // ----- Clientes (dropdown) -----
@@ -198,6 +215,13 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
     if ((notesInternal || "") !== (receivable.notes_internal || "")) {
       out.notes_internal = notesInternal || null;
     }
+    if (tagId !== initialTagId) {
+      out.tag_id = tagId || null;
+    }
+    const campanhaPayload = draftsToPayload(campanhaLinks);
+    if (JSON.stringify(campanhaPayload) !== initialCampanhaPayload) {
+      out.campanhas = campanhaPayload;
+    }
     return out;
   }, [
     isEdit,
@@ -212,7 +236,11 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
     refMonth,
     hasInvoice,
     description,
-    notesInternal
+    notesInternal,
+    tagId,
+    campanhaLinks,
+    initialTagId,
+    initialCampanhaPayload
   ]);
 
   const hasChanges = isEdit ? Object.keys(diff).length > 0 : true;
@@ -252,6 +280,11 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
         if (issueDate) fd.append("issue_date", issueDate);
         if (description.trim()) fd.append("description", description.trim());
         if (notesInternal.trim()) fd.append("notes_internal", notesInternal.trim());
+        if (tagId) fd.append("tag_id", tagId);
+        const campanhasPayload = draftsToPayload(campanhaLinks);
+        if (campanhasPayload.length > 0) {
+          fd.append("campanhas_json", JSON.stringify(campanhasPayload));
+        }
         if (hasInvoice && pdf) fd.append("pdf", pdf);
         saved = await apiFetch(`/nf/receivables`, { method: "POST", body: fd });
       }
@@ -551,6 +584,15 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
                 placeholder="Observacoes internas (opcional)"
               />
             </div>
+
+            <NfTagCampanhaFields
+              tagId={tagId}
+              onTagChange={setTagId}
+              campanhas={campanhaLinks}
+              onCampanhasChange={setCampanhaLinks}
+              totalNf={parseFloat((amount || "").replace(",", ".")) || undefined}
+              moeda={moeda}
+            />
 
             {error && (
               <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">

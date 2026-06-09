@@ -803,7 +803,22 @@ function InvoiceRow({
       }`}
     >
       <td className="whitespace-nowrap px-5 py-4 font-medium text-foreground">
-        {invoice.invoice_number}
+        <span>{invoice.invoice_number}</span>
+        {(invoice.tag_name || (invoice.campanhas && invoice.campanhas.length > 0)) && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {invoice.tag_name && (
+              <span className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                {invoice.tag_name}
+              </span>
+            )}
+            {invoice.campanhas && invoice.campanhas.length > 0 && (
+              <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted">
+                {invoice.campanhas.length}{" "}
+                {invoice.campanhas.length === 1 ? "campanha" : "campanhas"}
+              </span>
+            )}
+          </div>
+        )}
       </td>
       <td className="whitespace-nowrap px-5 py-4 font-medium text-foreground">
         {fmtCurrency(invoice.amount || 0, invoice.moeda || "BRL", lang)}

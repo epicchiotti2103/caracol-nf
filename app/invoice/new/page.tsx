@@ -15,6 +15,11 @@ import { AppShell } from "@/components/app-shell";
 import { useNfRole, langForRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
+import {
+  NfTagCampanhaFields,
+  draftsToPayload,
+  type CampanhaLinkDraft
+} from "@/components/nf/nf-tag-campanha-fields";
 import type { Supplier } from "@/types";
 
 const MAX_PDF_MB = 10;
@@ -67,6 +72,10 @@ function NewInvoiceForm() {
   const [refMonth, setRefMonth] = useState(""); // YYYY-MM
   const [campaign, setCampaign] = useState("");
   const [pdf, setPdf] = useState<File | null>(null);
+
+  // Tag (1 por NF) + vinculo de campanhas (N, cada uma com valor).
+  const [tagId, setTagId] = useState("");
+  const [campanhaLinks, setCampanhaLinks] = useState<CampanhaLinkDraft[]>([]);
 
   // Fornecedor cadastrado escolhido (so admin/adm_campanha).
   const [supplierId, setSupplierId] = useState("");
@@ -206,6 +215,11 @@ function NewInvoiceForm() {
       if (isAdmin && supplierId) {
         fd.append("supplier_id", supplierId);
       }
+      if (tagId) fd.append("tag_id", tagId);
+      const campanhasPayload = draftsToPayload(campanhaLinks);
+      if (campanhasPayload.length > 0) {
+        fd.append("campanhas_json", JSON.stringify(campanhasPayload));
+      }
       if (pdf) fd.append("pdf", pdf);
 
       await apiFetch("/nf/invoices", { method: "POST", body: fd });
@@ -238,6 +252,8 @@ function NewInvoiceForm() {
               setPdf(null);
               setSupplierId("");
               setMoeda("BRL");
+              setTagId("");
+              setCampanhaLinks([]);
             }}
             className="rounded-lg border border-border px-5 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-surface"
           >
@@ -413,6 +429,15 @@ function NewInvoiceForm() {
             />
           </div>
         </div>
+
+        <NfTagCampanhaFields
+          tagId={tagId}
+          onTagChange={setTagId}
+          campanhas={campanhaLinks}
+          onCampanhasChange={setCampanhaLinks}
+          totalNf={parseFloat((amount || "").replace(",", ".")) || undefined}
+          moeda={moeda}
+        />
 
         <div>
           <label className="mb-1.5 block text-sm font-medium text-foreground">

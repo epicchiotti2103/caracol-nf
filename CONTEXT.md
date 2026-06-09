@@ -49,9 +49,11 @@ caracol-nf/
       fornecedores/page.tsx      Cadastro de fornecedores (gate nf.fornecedores.*)
       usuarios-nf/page.tsx       Atribuicao de papel por usuario (gate nf.usuarios.*) + botao "Papeis"
       papeis/page.tsx            Matriz papel x permissao (GET/PUT /perms/nf/matrix)
+      tags/page.tsx              Catalogo de tags de NF (admin-only; CRUD /nf/tags)
   components/
     app-shell.tsx                Layout com navbar
     nf-navbar.tsx                Navbar unificado, adapta conforme papel
+    nf/nf-tag-campanha-fields.tsx  Bloco reusado nos 3 forms: seletor de tag + vinculo de campanhas
     nf/bootstrap-gate.tsx        Valida acesso e expoe papel via context
     nf/approval-badge.tsx        Badges 'N/2 aprovacoes' e 'Vencida ha N dias'
     nf/dashboard-chips.tsx       Chips do topo do dashboard (pendentes/a pagar/vencidas) + hovercard
@@ -93,6 +95,9 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `GET /nf/dashboard/pending-approvals` | `/to-pay` | `/overdue` — listas curtas (ate 10 itens) com `{invoice_id, invoice_number, fornecedor, valor, moeda?, aguarda?, pagador?, dias_atraso?}` pra preview do hovercard dos chips
 - `GET /nf/users` — lista users com `nf_role` (admin)
 - `PUT /nf/users/{user_id}/role` — `{role: NfRole | null}` (admin)
+- `GET /nf/tags` — catalogo de tags. `?active=true` filtra so ativas. Retorna `{items: [{id, name, active}]}`. Leitura: admin/adm_campanha. Escrita admin-only: `POST /nf/tags {name}` (retorna a tag), `PATCH /nf/tags/{id} {name?, active?}`, `PATCH /nf/tags/{id}/toggle-active`. Consumido por `/admin/tags` (CRUD) e pelo seletor de tag dos forms (`?active=true`).
+- `GET /campanhas?q=<texto>` — busca de campanhas pro seletor de vinculo (codigo `CMP-NNN` ou nome). Item: `{id, codigo, name, mes_referencia}`. Rota do app **Campanhas** (mesmo backend). Consumido pelo `CampanhaPicker` em `nf-tag-campanha-fields.tsx`.
+- **Tag + campanhas em invoice/receivable**: o `GET` de invoice e receivable agora carrega `tag_id`, `tag_name` e `campanhas: [{campanha_id, codigo, name, mes_referencia, valor_alocado}]`. O `POST` (multipart) aceita `tag_id` (Form) e `campanhas_json` (Form, string JSON `[{campanha_id, valor}]`). O `PATCH` (JSON) aceita `tag_id` e `campanhas: [{campanha_id, valor}]` (REPLACE total dos vinculos — frontend so envia quando o conjunto muda). Vinculos vivem em `nf_invoice_campanhas` / `nf_receivable_campanhas` no backend.
 - `GET /perms/nf/me` — `{app:"nf", role, permissions:[keys]}` — permissoes do papel do user logado. Consumido pelo `BootstrapGate` no bootstrap; alimenta `useCan()`. Se falhar, gate usa fallback derivado do role (graceful degradation).
 - `GET /perms/nf/matrix` — (admin) `{roles:[...], catalog:[{key,label,group}], matrix:{role:{key:bool}}}`. Consumido por `/admin/papeis`.
 - `PUT /perms/nf/matrix` — (admin) body `{matrix:{role:{key:bool}}}`. Salva a matriz; admin nao vai no body (god-mode). Retorna a matriz canonica.
