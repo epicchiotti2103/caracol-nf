@@ -59,7 +59,7 @@ function normalizeMoeda(m: CurrencyCode): "BRL" | "USD" {
 // Aceita assinatura legada (v, lang) e nova (v, moeda, lang?).
 // Default de moeda = BRL pra graceful degradation em NFs antigas.
 export function fmtCurrency(
-  v: number,
+  v: number | null | undefined,
   moedaOrLang?: CurrencyCode | Lang,
   lang?: Lang
 ): string {
@@ -73,7 +73,10 @@ export function fmtCurrency(
     if (lang) resolvedLang = lang;
   }
   const locale = resolvedLang === "en" ? "en-US" : "pt-BR";
-  return v.toLocaleString(locale, {
+  // Blindagem: backend pode mandar null (ex: diff/esperado sem fechamento).
+  // Sem isso, null.toLocaleString() lanca e derruba a arvore que renderiza.
+  const safe = typeof v === "number" && !isNaN(v) ? v : 0;
+  return safe.toLocaleString(locale, {
     style: "currency",
     currency: resolvedMoeda
   });

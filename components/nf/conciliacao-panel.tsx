@@ -166,7 +166,7 @@ function ConciliacaoBody({
         </span>
         <span
           className={`font-semibold ${
-            Math.abs(data.diff_total) > 0.005 ? "text-danger" : "text-emerald-400"
+            Math.abs(data.diff_total ?? 0) > 0.005 ? "text-danger" : "text-emerald-400"
           }`}
         >
           diff: {fmtCurrency(data.diff_total, moeda, "pt")}
@@ -199,7 +199,7 @@ function CampanhaRow({
           informado: {fmtCurrency(c.valor_informado, moeda, "pt")}
           {" · "}
           esperado: {fmtCurrency(c.valor_esperado, rowMoeda, "pt")}
-          {Math.abs(c.diff) > 0.005 && (
+          {c.diff != null && Math.abs(c.diff) > 0.005 && (
             <span className="text-danger">
               {" · "}diff: {fmtCurrency(c.diff, moeda, "pt")}
             </span>

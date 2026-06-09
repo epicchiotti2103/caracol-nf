@@ -412,17 +412,20 @@ export interface ConciliacaoCampanha {
   name: string | null;
   mes_referencia: string | null;
   valor_informado: number;
-  valor_esperado: number;
+  // null quando nao ha fechamento/publisher pra comparar.
+  valor_esperado: number | null;
   moeda_fechamento: string | null;
   status: ConciliacaoCampanhaStatus;
-  diff: number;
+  // null quando nao ha valor esperado.
+  diff: number | null;
 }
 
 export interface ConciliacaoResponse {
   publisher_name: string | null;
   total_informado: number;
   total_esperado: number;
-  diff_total: number;
+  // null quando nenhuma campanha tem fechamento (tem_esperado=false no backend).
+  diff_total: number | null;
   status_geral: ConciliacaoStatusGeral;
   por_campanha: ConciliacaoCampanha[];
 }
