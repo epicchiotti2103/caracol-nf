@@ -420,6 +420,7 @@ function NewInvoiceForm() {
           onCampanhasChange={setCampanhaLinks}
           totalNf={parseFloat((amount || "").replace(",", ".")) || undefined}
           moeda={moeda}
+          supplierId={isAdmin ? supplierId || undefined : undefined}
         />
 
         {isAdmin && (

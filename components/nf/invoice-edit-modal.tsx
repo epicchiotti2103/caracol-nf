@@ -335,6 +335,7 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
               onCampanhasChange={setCampanhaLinks}
               totalNf={parseFloat((amount || "").replace(",", ".")) || undefined}
               moeda={moeda}
+              supplierId={supplierId || undefined}
             />
 
             <ConciliacaoPanel

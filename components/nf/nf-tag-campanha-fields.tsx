@@ -1,10 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Plus, Search, Tag as TagIcon, X } from "lucide-react";
+import { Loader2, Plus, Search, Sparkles, Tag as TagIcon, X } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { fmtCurrency } from "@/lib/i18n";
-import type { CampanhaSearchItem, NfCampanhaLink, NfTag } from "@/types";
+import type {
+  CampanhaSearchItem,
+  FechamentoSugestaoItem,
+  NfCampanhaLink,
+  NfTag
+} from "@/types";
 
 // Linha de vinculo no estado do form (valor como string pra mascara monetaria
 // consistente com o resto do NF — vira number so no submit).
@@ -14,6 +19,9 @@ export interface CampanhaLinkDraft {
   // quando ausente cai no campanha_id.
   label?: string;
   valor: string;
+  // True quando a linha nasceu de uma sugestao do fechamento (marcar checkbox).
+  // Usado pra (a) nao duplicar na lista manual e (b) limpar ao trocar fornecedor.
+  from_suggestion?: boolean;
 }
 
 // Converte os links enriquecidos do GET (NfCampanhaLink) em rascunhos editaveis.
@@ -71,6 +79,10 @@ interface Props {
   // Total da NF (numero) pra comparar com a soma das alocacoes. Opcional.
   totalNf?: number;
   moeda?: string;
+  // Fornecedor escolhido (so NF a PAGAR, admin/adm_campanha). Quando presente,
+  // habilita o bloco de SUGESTOES do fechamento (campanhas a receber agrupadas
+  // por mes). Ausente (NF a receber, ou sem fornecedor) => so modo manual.
+  supplierId?: string;
 }
 
 /**
@@ -90,10 +102,113 @@ export function NfTagCampanhaFields({
   campanhas,
   onCampanhasChange,
   totalNf,
-  moeda = "BRL"
+  moeda = "BRL",
+  supplierId
 }: Props) {
   const [tags, setTags] = useState<NfTag[]>([]);
   const [tagsUnavailable, setTagsUnavailable] = useState(false);
+
+  // ── Sugestoes do fechamento (so quando ha fornecedor) ─────────────────────
+  const [suggestions, setSuggestions] = useState<FechamentoSugestaoItem[]>([]);
+  const [sugLoading, setSugLoading] = useState(false);
+  // Backend ainda em deploy / 404 / erro de rede => suprime o bloco (graceful).
+  const [sugUnavailable, setSugUnavailable] = useState(false);
+
+  // Busca as sugestoes sempre que o fornecedor muda. Sem fornecedor, zera.
+  useEffect(() => {
+    if (!supplierId) {
+      setSuggestions([]);
+      setSugUnavailable(false);
+      setSugLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setSugLoading(true);
+    (async () => {
+      try {
+        const res: { items?: FechamentoSugestaoItem[] } | FechamentoSugestaoItem[] =
+          await apiFetch(
+            `/nf/fechamento-sugestoes?supplier_id=${encodeURIComponent(supplierId)}`
+          );
+        const items = Array.isArray(res) ? res : res?.items || [];
+        if (!cancelled) {
+          setSuggestions(items);
+          setSugUnavailable(false);
+        }
+      } catch {
+        if (!cancelled) {
+          setSuggestions([]);
+          setSugUnavailable(true);
+        }
+      } finally {
+        if (!cancelled) setSugLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [supplierId]);
+
+  // Ao TROCAR de fornecedor, descarta as linhas que vieram de sugestao (pertenciam
+  // ao fornecedor antigo) — mas preserva as adicionadas manualmente. O guard por
+  // ref evita rodar no mount e em re-renders que nao mudaram o fornecedor.
+  const prevSupplierRef = useRef(supplierId);
+  useEffect(() => {
+    if (prevSupplierRef.current === supplierId) return;
+    prevSupplierRef.current = supplierId;
+    if (campanhas.some((c) => c.from_suggestion)) {
+      onCampanhasChange(campanhas.filter((c) => !c.from_suggestion));
+    }
+  }, [supplierId, campanhas, onCampanhasChange]);
+
+  // Agrupa as sugestoes por mes de referencia (mais recente primeiro).
+  const suggestionGroups = useMemo(() => {
+    const map = new Map<string, FechamentoSugestaoItem[]>();
+    for (const it of suggestions) {
+      const key = it.mes_referencia || "";
+      const arr = map.get(key);
+      if (arr) arr.push(it);
+      else map.set(key, [it]);
+    }
+    return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
+  }, [suggestions]);
+
+  // campanha_id -> linha atual no estado (pra refletir checkbox/valor).
+  const draftById = useMemo(() => {
+    const m = new Map<string, CampanhaLinkDraft>();
+    for (const d of campanhas) if (d.campanha_id) m.set(d.campanha_id, d);
+    return m;
+  }, [campanhas]);
+
+  const updateById = (campanha_id: string, patch: Partial<CampanhaLinkDraft>) => {
+    onCampanhasChange(
+      campanhas.map((c) => (c.campanha_id === campanha_id ? { ...c, ...patch } : c))
+    );
+  };
+
+  const toggleSuggestion = (item: FechamentoSugestaoItem) => {
+    if (draftById.has(item.campanha_id)) {
+      onCampanhasChange(
+        campanhas.filter((c) => c.campanha_id !== item.campanha_id)
+      );
+      return;
+    }
+    const label = formatCampanhaLabel({
+      id: item.campanha_id,
+      codigo: item.codigo ?? null,
+      name: item.campanha_name ?? null,
+      mes_referencia: item.mes_referencia ?? null
+    });
+    onCampanhasChange([
+      ...campanhas,
+      {
+        campanha_id: item.campanha_id,
+        label,
+        valor: String(item.valor_sugerido ?? ""),
+        from_suggestion: true
+      }
+    ]);
+  };
 
   // Lista de meses de referencia disponiveis (cacheada no nivel do bloco,
   // compartilhada por todas as linhas — nao rebusca por linha).
@@ -152,6 +267,10 @@ export function NfTagCampanhaFields({
   );
 
   const hasCampanhas = campanhas.length > 0;
+  // Linhas mostradas na lista manual (com fornecedor, as de sugestao saem dali).
+  const manualCount = supplierId
+    ? campanhas.filter((c) => !c.from_suggestion).length
+    : campanhas.length;
   const totalKnown = typeof totalNf === "number" && !isNaN(totalNf) && totalNf > 0;
   const mismatch =
     hasCampanhas && totalKnown && Math.abs(somaAloc - totalNf) > 0.005;
@@ -201,10 +320,92 @@ export function NfTagCampanhaFields({
         )}
       </div>
 
+      {/* Sugestoes do fechamento (so com fornecedor; graceful se indisponivel) */}
+      {supplierId && !sugUnavailable && (sugLoading || suggestionGroups.length > 0) && (
+        <div className="rounded-lg border border-border bg-background/40 p-3">
+          <div className="mb-2 flex items-center gap-1.5">
+            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <p className="text-sm font-medium text-foreground">
+              Pagamentos a receber (do fechamento)
+            </p>
+            {sugLoading && (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+            )}
+          </div>
+
+          {!sugLoading && suggestionGroups.length === 0 ? (
+            <p className="text-xs text-muted">
+              Nenhum pagamento pendente do fechamento para este fornecedor.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {suggestionGroups.map(([mes, items]) => (
+                <div key={mes || "sem-mes"}>
+                  <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
+                    {formatMesRef(mes) || "Sem mes"}
+                  </p>
+                  <div className="space-y-1.5">
+                    {items.map((item) => {
+                      const draft = draftById.get(item.campanha_id);
+                      const checked = !!draft;
+                      const sugMoeda = item.moeda || moeda;
+                      return (
+                        <div
+                          key={item.campanha_id}
+                          className="flex items-center gap-2"
+                        >
+                          <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleSuggestion(item)}
+                              className="h-4 w-4 flex-shrink-0 accent-primary"
+                            />
+                            <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                              {item.codigo ? `${item.codigo} — ` : ""}
+                              {item.campanha_name || item.campanha_id.slice(0, 8)}
+                            </span>
+                          </label>
+                          {checked ? (
+                            <input
+                              value={draft?.valor ?? ""}
+                              onChange={(e) =>
+                                updateById(item.campanha_id, {
+                                  valor: e.target.value
+                                })
+                              }
+                              inputMode="decimal"
+                              placeholder="0,00"
+                              aria-label="Valor a vincular"
+                              className="w-28 flex-shrink-0 rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus:border-primary/60"
+                            />
+                          ) : (
+                            <span className="w-28 flex-shrink-0 text-right text-xs text-muted">
+                              {fmtCurrency(item.valor_sugerido, sugMoeda, "pt")}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <p className="mt-2 text-[11px] text-muted">
+            Marque as campanhas que esta NF cobre. O valor vem do fechamento e e
+            editavel.
+          </p>
+        </div>
+      )}
+
       {/* Campanhas */}
       <div>
         <div className="mb-1.5 flex items-center justify-between">
-          <label className="text-sm font-medium text-foreground">Campanhas</label>
+          <label className="text-sm font-medium text-foreground">
+            {supplierId ? "Outras campanhas" : "Campanhas"}
+          </label>
           {hasCampanhas && (
             <span
               className={`text-xs ${mismatch ? "text-amber-400" : "text-muted"}`}
@@ -220,46 +421,53 @@ export function NfTagCampanhaFields({
           )}
         </div>
 
-        {campanhas.length === 0 && (
+        {manualCount === 0 && (
           <p className="mb-2 text-xs text-muted">
-            Nenhuma campanha vinculada.
+            {supplierId
+              ? "Nenhuma campanha avulsa. Use a busca abaixo pra vincular fora da sugestao."
+              : "Nenhuma campanha vinculada."}
           </p>
         )}
 
         <div className="space-y-2">
-          {campanhas.map((row, idx) => (
-            <div key={idx} className="flex items-start gap-2">
-              <div className="flex-1">
-                <CampanhaPicker
-                  value={row.campanha_id}
-                  label={row.label}
-                  months={months}
-                  onSelect={(item) =>
-                    updateRow(idx, {
-                      campanha_id: item.id,
-                      label: formatCampanhaLabel(item)
-                    })
-                  }
+          {campanhas.map((row, idx) => {
+            // Linhas vindas de sugestao sao geridas pelos checkboxes acima — nao
+            // duplicar aqui. (idx preservado retornando null pra updateRow/removeRow.)
+            if (supplierId && row.from_suggestion) return null;
+            return (
+              <div key={idx} className="flex items-start gap-2">
+                <div className="flex-1">
+                  <CampanhaPicker
+                    value={row.campanha_id}
+                    label={row.label}
+                    months={months}
+                    onSelect={(item) =>
+                      updateRow(idx, {
+                        campanha_id: item.id,
+                        label: formatCampanhaLabel(item)
+                      })
+                    }
+                  />
+                </div>
+                <input
+                  value={row.valor}
+                  onChange={(e) => updateRow(idx, { valor: e.target.value })}
+                  inputMode="decimal"
+                  placeholder="0,00"
+                  aria-label="Valor alocado"
+                  className="w-28 flex-shrink-0 rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
                 />
+                <button
+                  type="button"
+                  onClick={() => removeRow(idx)}
+                  aria-label="Remover campanha"
+                  className="mt-1 flex-shrink-0 rounded-lg p-2 text-muted transition-colors hover:bg-surface hover:text-danger"
+                >
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-              <input
-                value={row.valor}
-                onChange={(e) => updateRow(idx, { valor: e.target.value })}
-                inputMode="decimal"
-                placeholder="0,00"
-                aria-label="Valor alocado"
-                className="w-28 flex-shrink-0 rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
-              />
-              <button
-                type="button"
-                onClick={() => removeRow(idx)}
-                aria-label="Remover campanha"
-                className="mt-1 flex-shrink-0 rounded-lg p-2 text-muted transition-colors hover:bg-surface hover:text-danger"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         <button
@@ -268,7 +476,7 @@ export function NfTagCampanhaFields({
           className="mt-2 flex items-center gap-1.5 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-surface/80"
         >
           <Plus className="h-3.5 w-3.5" />
-          Adicionar campanha
+          {supplierId ? "Adicionar campanha avulsa" : "Adicionar campanha"}
         </button>
       </div>
     </div>

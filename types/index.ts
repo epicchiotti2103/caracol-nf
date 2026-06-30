@@ -429,3 +429,17 @@ export interface ConciliacaoResponse {
   status_geral: ConciliacaoStatusGeral;
   por_campanha: ConciliacaoCampanha[];
 }
+
+// Sugestao de vinculo vinda do fechamento de campanha.
+// GET /nf/fechamento-sugestoes?supplier_id=<uuid> -> { items: [...] }.
+// Lista as campanhas onde o fornecedor tem pagamento a RECEBER do fechamento
+// e que ainda NAO tem NF a pagar vinculada. `valor_sugerido` e o bruto do
+// fechamento. `codigo` pode nao vir (backend em paralelo) -> ler defensivo.
+export interface FechamentoSugestaoItem {
+  mes_referencia: string | null;
+  campanha_id: string;
+  campanha_name: string | null;
+  codigo?: string | null;
+  valor_sugerido: number;
+  moeda: "BRL" | "USD";
+}
