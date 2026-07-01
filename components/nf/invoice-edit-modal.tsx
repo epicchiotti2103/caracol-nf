@@ -312,7 +312,7 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
 
             <div>
               <label className="mb-1.5 block text-sm font-medium text-foreground">
-                Mes de referencia <span className="text-primary">*</span>
+                Mes de competencia da NF <span className="text-primary">*</span>
               </label>
               <select
                 value={refMonth}
@@ -326,6 +326,10 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
                   </option>
                 ))}
               </select>
+              <p className="mt-1.5 text-xs text-muted">
+                Nao limita as campanhas — voce pode vincular campanhas de meses
+                diferentes abaixo.
+              </p>
             </div>
 
             <NfTagCampanhaFields

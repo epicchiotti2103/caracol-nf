@@ -291,6 +291,10 @@ export function NfTagCampanhaFields({
 
   return (
     <div className="space-y-4 rounded-lg border border-border bg-background/40 p-4">
+      <p className="text-xs text-muted">
+        Voce pode vincular campanhas de meses diferentes nesta mesma NF.
+      </p>
+
       {/* Tag */}
       <div>
         <label className="mb-1.5 flex items-center gap-1.5 text-sm font-medium text-foreground">
@@ -342,7 +346,7 @@ export function NfTagCampanhaFields({
               {suggestionGroups.map(([mes, items]) => (
                 <div key={mes || "sem-mes"}>
                   <p className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted">
-                    {formatMesRef(mes) || "Sem mes"}
+                    {mes ? `Mes ${formatMesRef(mes)}` : "Sem mes"}
                   </p>
                   <div className="space-y-1.5">
                     {items.map((item) => {
@@ -580,19 +584,24 @@ function CampanhaPicker({
   return (
     <div ref={boxRef} className="relative space-y-2">
       {months.length > 0 && (
-        <select
-          value={month}
-          onChange={(e) => setMonth(e.target.value)}
-          aria-label="Mes de referencia da campanha"
-          className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
-        >
-          <option value="">Todos os meses</option>
-          {months.map((m) => (
-            <option key={m} value={m}>
-              {formatMesRef(m)}
-            </option>
-          ))}
-        </select>
+        <div className="flex items-center gap-2">
+          <span className="flex-shrink-0 text-xs font-medium text-muted">
+            Mes:
+          </span>
+          <select
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            aria-label="Mes de referencia da campanha"
+            className="w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
+          >
+            <option value="">Todos os meses</option>
+            {months.map((m) => (
+              <option key={m} value={m}>
+                {formatMesRef(m)}
+              </option>
+            ))}
+          </select>
+        </div>
       )}
       <div className="relative">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />

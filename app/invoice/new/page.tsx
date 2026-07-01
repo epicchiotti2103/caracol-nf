@@ -124,7 +124,11 @@ function NewInvoiceForm() {
     invoiceNumber: lang === "pt" ? "Numero da NF" : "Invoice number",
     amount: lang === "pt" ? "Valor" : "Amount",
     dueDate: lang === "pt" ? "Vencimento" : "Due date",
-    refMonth: lang === "pt" ? "Mes de referencia" : "Reference month",
+    refMonth: lang === "pt" ? "Mes de competencia da NF" : "Invoice competence month",
+    refMonthHint:
+      lang === "pt"
+        ? "Nao limita as campanhas — voce pode vincular campanhas de meses diferentes abaixo."
+        : "Does not limit campaigns — you can link campaigns from different months below.",
     moedaLabel: lang === "pt" ? "Moeda" : "Currency",
     pdfFile: lang === "pt" ? "Arquivo PDF" : "PDF file",
     submit: lang === "pt" ? "Enviar NF" : "Send invoice",
@@ -411,6 +415,7 @@ function NewInvoiceForm() {
               </option>
             ))}
           </select>
+          <p className="mt-1.5 text-xs text-muted">{labels.refMonthHint}</p>
         </div>
 
         <NfTagCampanhaFields
