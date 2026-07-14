@@ -30,6 +30,20 @@ type Action = "approve_adm" | "approve_admin" | "reject" | "pay";
 const PROOF_MAX_MB = 10;
 const PROOF_ACCEPT = "image/png,image/jpeg,application/pdf";
 const PROOF_MIMES = new Set(["image/png", "image/jpeg", "application/pdf"]);
+// Default da taxa bancaria por transferencia — mesma convencao do pagamento em
+// lote. O DEFAULT DE 40 vem do FRONT (backend defaulta 0).
+const DEFAULT_FEE = "40,00";
+
+function todayISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Normaliza "40,00" / "1.234,56" -> numero. Igual ao parse do batch modal.
+function parseFee(raw: string): number {
+  const n = parseFloat(raw.replace(/\./g, "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
 
 export default function InvoiceDetailPage({ params }: { params: { id: string } }) {
   return (
@@ -58,6 +72,11 @@ function InvoiceDetail({ id }: { id: string }) {
   // Upload do comprovante de pagamento (modal "Marcar como paga")
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [proofError, setProofError] = useState("");
+  // Taxa bancaria da transferencia (default 40,00, editavel) + data de caixa.
+  // Enviadas ao /pay: se fee>0 o backend cria um batch de 1 item (contabiliza no
+  // Gerencial sem duplicar); fee 0 = comportamento antigo.
+  const [payFee, setPayFee] = useState(DEFAULT_FEE);
+  const [payData, setPayData] = useState(todayISO());
   // Bump usado pra refrescar a timeline apos acoes
   const [eventsRefreshKey, setEventsRefreshKey] = useState(0);
   // Lote de pagamento (quais NFs dividem o mesmo comprovante)
@@ -134,6 +153,16 @@ function InvoiceDetail({ id }: { id: string }) {
         : "Invalid type. Use PNG, JPEG or PDF.",
     proofConfirm:
       lang === "pt" ? "Confirmar pagamento" : "Confirm payment",
+    feeLabel:
+      lang === "pt" ? "Taxa bancaria da transferencia" : "Bank transfer fee",
+    feeHint:
+      lang === "pt"
+        ? "Somada a saida de caixa e contabilizada no Gerencial. Use 0 se nao houve taxa."
+        : "Added to cash-out and tracked in Gerencial. Use 0 if there was no fee.",
+    feeInvalid:
+      lang === "pt" ? "Taxa invalida." : "Invalid fee.",
+    payDateLabel:
+      lang === "pt" ? "Data da transferencia" : "Transfer date",
     payTitle: lang === "pt" ? "Marcar NF" : "Mark invoice",
     asPaid: lang === "pt" ? "como paga" : "as paid",
     approveAdm: "Aprovar (adm campanha)",
@@ -429,8 +458,17 @@ function InvoiceDetail({ id }: { id: string }) {
           setActing(false);
           return;
         }
+        const feeNum = parseFee(payFee);
+        if (feeNum < 0) {
+          setProofError(t.feeInvalid);
+          setActing(false);
+          return;
+        }
         const fd = new FormData();
         fd.append("proof", proofFile);
+        // Manda o valor normalizado ("40,00" -> "40"); backend defaulta 0.
+        fd.append("fee", String(feeNum));
+        fd.append("data", payData);
         updated = await apiFetch(`/nf/invoices/${id}/pay`, {
           method: "POST",
           body: fd
@@ -463,6 +501,8 @@ function InvoiceDetail({ id }: { id: string }) {
       setPaidByAssigneeId("");
       setProofFile(null);
       setProofError("");
+      setPayFee(DEFAULT_FEE);
+      setPayData(todayISO());
       setEventsRefreshKey((k) => k + 1);
       // Ressincroniza pra pegar campos derivados possivelmente ausentes na resposta direta
       refreshInvoice();
@@ -763,6 +803,11 @@ function InvoiceDetail({ id }: { id: string }) {
             setProofFile(f);
           }}
           proofError={proofError}
+          fee={payFee}
+          setFee={setPayFee}
+          payData={payData}
+          setPayData={setPayData}
+          moeda={invoice.moeda === "USD" ? "USD" : "BRL"}
           loading={acting}
           onCancel={() => {
             setPendingAction(null);
@@ -771,6 +816,8 @@ function InvoiceDetail({ id }: { id: string }) {
             setPaidByAssigneeId("");
             setProofFile(null);
             setProofError("");
+            setPayFee(DEFAULT_FEE);
+            setPayData(todayISO());
           }}
           onConfirm={executeAction}
         />
@@ -1306,6 +1353,11 @@ function ActionModal({
   proofFile,
   setProofFile,
   proofError,
+  fee,
+  setFee,
+  payData,
+  setPayData,
+  moeda,
   loading,
   onCancel,
   onConfirm
@@ -1325,6 +1377,11 @@ function ActionModal({
   proofFile: File | null;
   setProofFile: (f: File | null) => void;
   proofError: string;
+  fee: string;
+  setFee: (v: string) => void;
+  payData: string;
+  setPayData: (v: string) => void;
+  moeda: "BRL" | "USD";
   loading: boolean;
   onCancel: () => void;
   onConfirm: () => void;
@@ -1407,6 +1464,31 @@ function ActionModal({
                   <p className="mt-1 text-xs text-danger">{proofError}</p>
                 )}
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-foreground">
+                    {t.feeLabel} ({moeda === "USD" ? "US$" : "R$"})
+                  </label>
+                  <input
+                    value={fee}
+                    onChange={(e) => setFee(e.target.value)}
+                    inputMode="decimal"
+                    className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-foreground">
+                    {t.payDateLabel}
+                  </label>
+                  <input
+                    type="date"
+                    value={payData}
+                    onChange={(e) => setPayData(e.target.value)}
+                    className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-muted">{t.feeHint}</p>
             </>
           )}
 
