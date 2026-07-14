@@ -63,7 +63,9 @@ const TONE_CLASSES: Record<ChipDef["tone"], { chip: string; iconBg: string }> = 
 
 export function DashboardChips({
   counts,
-  queryString = ""
+  queryString = "",
+  onOverdueClick,
+  overdueActive = false
 }: {
   counts: {
     pending: number;
@@ -72,6 +74,9 @@ export function DashboardChips({
   };
   // Quando setado, propaga filtros pros endpoints de hover E pro link "ver todas"
   queryString?: string;
+  // Clicar no chip "vencidas" alterna o filtro da tabela abaixo (toggle).
+  onOverdueClick?: () => void;
+  overdueActive?: boolean;
 }) {
   return (
     <div className="mb-6 flex flex-wrap gap-2">
@@ -81,6 +86,8 @@ export function DashboardChips({
           def={c}
           count={counts[c.key]}
           queryString={queryString}
+          onClick={c.key === "overdue" ? onOverdueClick : undefined}
+          active={c.key === "overdue" ? overdueActive : false}
         />
       ))}
     </div>
@@ -90,11 +97,15 @@ export function DashboardChips({
 function ChipWithHover({
   def,
   count,
-  queryString
+  queryString,
+  onClick,
+  active = false
 }: {
   def: ChipDef;
   count: number;
   queryString: string;
+  onClick?: () => void;
+  active?: boolean;
 }) {
   const [items, setItems] = useState<DashboardChipItem[] | null>(null);
   const [loading, setLoading] = useState(false);
@@ -141,7 +152,19 @@ function ChipWithHover({
         width={360}
         trigger={
           <span
-            className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${tone.chip}`}
+            onClick={
+              onClick
+                ? (e) => {
+                    // Evita que o clique tambem alterne o popover do HoverPopover.
+                    e.stopPropagation();
+                    onClick();
+                  }
+                : undefined
+            }
+            title={onClick ? "Clique pra filtrar a tabela" : undefined}
+            className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${tone.chip} ${
+              active ? "ring-2 ring-red-400/70 ring-offset-1 ring-offset-background" : ""
+            }`}
           >
             <span
               className={`inline-flex h-5 w-5 items-center justify-center rounded-full ${tone.iconBg}`}

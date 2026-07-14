@@ -19,7 +19,10 @@ import {
   ChevronRight,
   X,
   Filter,
-  Layers
+  Layers,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { BatchPayModal } from "@/components/nf/batch-pay-modal";
@@ -141,6 +144,16 @@ function HomeContent() {
   const [assigneeId, setAssigneeId] = useState<string>(initialAssignee);
   const [mineOnly, setMineOnly] = useState(false);
   const [batchOpen, setBatchOpen] = useState(false);
+  // Ordenacao clicavel por coluna: null = ordem natural do backend.
+  // 3 estados por coluna: asc -> desc -> sem ordenacao.
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir } | null>(null);
+  const toggleSort = (key: SortKey) => {
+    setSort((prev) => {
+      if (!prev || prev.key !== key) return { key, dir: "asc" };
+      if (prev.dir === "asc") return { key, dir: "desc" };
+      return null;
+    });
+  };
 
   const showAssignedBanner =
     (role === "admin" || role === "adm_campanha") && pendingAssignedCount > 0;
@@ -283,6 +296,29 @@ function HomeContent() {
       return matchStatus && matchSearch && matchMine && matchOverdue;
     });
   }, [invoices, search, statusFilter, mineOnly, overdueOnly, user?.id, role]);
+
+  // Aplica ordenacao clicavel sobre a lista ja filtrada. Vazios/nulos sempre
+  // ao fim (independente da direcao). Comparacao numerica p/ valor; strings ISO
+  // (due_date YYYY-MM-DD, reference_month YYYY-MM) ordenam lexicograficamente.
+  const displayed = useMemo(() => {
+    if (!sort) return filtered;
+    const arr = [...filtered];
+    arr.sort((a, b) => {
+      const va = sortValue(a, sort.key);
+      const vb = sortValue(b, sort.key);
+      const ea = va === "" || va == null;
+      const eb = vb === "" || vb == null;
+      if (ea && eb) return 0;
+      if (ea) return 1;
+      if (eb) return -1;
+      const cmp =
+        typeof va === "number" && typeof vb === "number"
+          ? va - vb
+          : String(va).localeCompare(String(vb), "pt");
+      return sort.dir === "asc" ? cmp : -cmp;
+    });
+    return arr;
+  }, [filtered, sort]);
 
   const titlePt = role === "admin" ? "Painel admin" : "Notas fiscais";
   const subtitlePt =
@@ -544,7 +580,12 @@ function HomeContent() {
 
       {/* Chips de status do dashboard */}
       {showDashboardChips && (
-        <DashboardChips counts={chipCounts} queryString={serverQuery} />
+        <DashboardChips
+          counts={chipCounts}
+          queryString={serverQuery}
+          onOverdueClick={() => setOverdueOnly((v) => !v)}
+          overdueActive={overdueOnly}
+        />
       )}
 
       {showAssignedBanner && (
@@ -685,14 +726,39 @@ function HomeContent() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border">
-                {headersFor(role).map((h) => (
-                  <th
-                    key={h}
-                    className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted"
-                  >
-                    {h}
-                  </th>
-                ))}
+                {columnsFor(role).map((col, idx) => {
+                  const active = !!col.sortKey && sort?.key === col.sortKey;
+                  return (
+                    <th
+                      key={idx}
+                      className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted"
+                    >
+                      {col.sortKey ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleSort(col.sortKey!)}
+                          className={`group/sort inline-flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-foreground ${
+                            active ? "text-foreground" : ""
+                          }`}
+                          title={lang === "pt" ? "Ordenar" : "Sort"}
+                        >
+                          {col.label}
+                          {active ? (
+                            sort!.dir === "asc" ? (
+                              <ArrowUp className="h-3 w-3" />
+                            ) : (
+                              <ArrowDown className="h-3 w-3" />
+                            )
+                          ) : (
+                            <ArrowUpDown className="h-3 w-3 opacity-30 transition-opacity group-hover/sort:opacity-70" />
+                          )}
+                        </button>
+                      ) : (
+                        col.label
+                      )}
+                    </th>
+                  );
+                })}
               </tr>
             </thead>
             <tbody>
@@ -718,12 +784,12 @@ function HomeContent() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((inv, i) => (
+                displayed.map((inv, i) => (
                   <InvoiceRow
                     key={inv.id}
                     invoice={inv}
                     role={role}
-                    isLast={i === filtered.length - 1}
+                    isLast={i === displayed.length - 1}
                     onClick={() => router.push(`/invoice/${inv.id}`)}
                   />
                 ))
@@ -793,29 +859,74 @@ function ActivePill({ label, onClear }: { label: string; onClear: () => void }) 
   );
 }
 
-function headersFor(role: string): string[] {
+type SortKey =
+  | "invoice_number"
+  | "amount"
+  | "due_date"
+  | "reference_month"
+  | "status"
+  | "supplier"
+  | "assignee";
+type SortDir = "asc" | "desc";
+
+type Column = { label: string; sortKey?: SortKey };
+
+// Ordem logica de status (nao alfabetica) pra ordenacao fazer sentido.
+const STATUS_RANK: Record<string, number> = {
+  em_analise: 0,
+  aprovada: 1,
+  paga: 2,
+  recusada: 3
+};
+
+// Valor comparavel de cada NF por coluna. Fornecedor usa o mesmo fallback que a
+// linha renderiza (supplier_name ?? publisher_name), senao publishers colapsam.
+function sortValue(inv: Invoice, key: SortKey): string | number {
+  switch (key) {
+    case "invoice_number":
+      return (inv.invoice_number || "").toLowerCase();
+    case "amount":
+      return inv.amount || 0;
+    case "due_date":
+      return inv.due_date || "";
+    case "reference_month":
+      return inv.reference_month || "";
+    case "status":
+      return STATUS_RANK[inv.status] ?? 99;
+    case "supplier":
+      return (inv.supplier_name ?? inv.publisher_name ?? "").toLowerCase();
+    case "assignee":
+      return (inv.assignee_name ?? "").toLowerCase();
+    default:
+      return "";
+  }
+}
+
+// Colunas da tabela por papel. `sortKey` ausente = header nao clicavel.
+// A ordem/posicao precisa espelhar exatamente as colunas de InvoiceRow.
+function columnsFor(role: string): Column[] {
   if (role === "publisher") {
     return [
-      "Invoice #",
-      "Amount",
-      "Due Date",
-      "Reference Month",
-      "Status",
-      "PDF",
-      ""
+      { label: "Invoice #", sortKey: "invoice_number" },
+      { label: "Amount", sortKey: "amount" },
+      { label: "Due Date", sortKey: "due_date" },
+      { label: "Reference Month", sortKey: "reference_month" },
+      { label: "Status", sortKey: "status" },
+      { label: "PDF" },
+      { label: "" }
     ];
   }
   return [
-    "NF",
-    "Valor",
-    "Vencimento",
-    "Mes Ref",
-    "Status",
-    "Aprovacoes",
-    "Fornecedor",
-    "Responsavel",
-    "PDF",
-    ""
+    { label: "NF", sortKey: "invoice_number" },
+    { label: "Valor", sortKey: "amount" },
+    { label: "Vencimento", sortKey: "due_date" },
+    { label: "Mes Ref", sortKey: "reference_month" },
+    { label: "Status", sortKey: "status" },
+    { label: "Aprovacoes" },
+    { label: "Fornecedor", sortKey: "supplier" },
+    { label: "Responsavel", sortKey: "assignee" },
+    { label: "PDF" },
+    { label: "" }
   ];
 }
 
