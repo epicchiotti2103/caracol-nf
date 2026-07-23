@@ -79,7 +79,7 @@ Toda NF em `em_analise` precisa de DUAS aprovacoes: uma do `adm_campanha` e outr
 
 - `POST /nf/invoices/{id}/approve` — body opcional `{paid_by_assignee_id}`. Backend detecta o papel do caller e popula a coluna correta.
 - `POST /nf/invoices/{id}/reject` — body `{reason, notes_internal?}`. So funciona em `em_analise`.
-- `POST /nf/invoices/{id}/pay` — admin only. **Multipart/form-data** com campo `proof` obrigatorio (PNG, JPEG ou PDF, max 10MB). UI abre modal com upload antes de confirmar; backend grava `paid_proof_path` no storage.
+- `POST /nf/invoices/{id}/pay` — admin only. **Multipart/form-data** com campo `proof` obrigatorio (PNG, JPEG ou PDF, max 10MB) + `fee` (taxa da transferencia, default 40 no front), `data` (data de caixa) e `conta` (de qual conta saiu o dinheiro — ver `lib/contas.ts`: BRL = `conta_corrente`/`investimento`, USD = `helmbank`/`tronlink`; default por moeda). UI abre modal com upload antes de confirmar; backend grava `paid_proof_path` no storage.
 
 Quando o admin completa a dupla, a UI abre um modal "Aprovar NF #X" com a opcao opcional **Designar pagador** (dropdown de admins). Se preenchido, a NF fica com `paid_by_assignee_id`/`paid_by_assignee_name` setados e o detalhe exibe "Pagador designado: Nome". Qualquer admin ainda pode pagar; e so um sinal de fluxo.
 
@@ -87,9 +87,9 @@ Ao marcar como paga, o admin abre um modal de upload e anexa o **comprovante de 
 
 ### Pagamento em lote (1 transferencia, varias NFs)
 
-Quando uma transferencia bancaria quita VARIAS NFs de uma vez (mesmo comprovante) e tem UMA taxa (~US$ 40 por transferencia, nao por nota), use o **"Pagar em lote"** (botao no topo da lista "A pagar", so admin). O modal (`components/nf/batch-pay-modal.tsx`) lista as NFs `aprovada` por moeda, anexa **1 comprovante compartilhado**, recebe a **taxa** (default 40) + data, e marca todas como pagas de uma vez.
+Quando uma transferencia bancaria quita VARIAS NFs de uma vez (mesmo comprovante) e tem UMA taxa (~US$ 40 por transferencia, nao por nota), use o **"Pagar em lote"** (botao no topo da lista "A pagar", so admin). O modal (`components/nf/batch-pay-modal.tsx`) lista as NFs `aprovada` por moeda, anexa **1 comprovante compartilhado**, recebe a **taxa** (default 40) + data + seletor **"Saiu de qual conta?"** (opcoes por moeda, ver `lib/contas.ts`), e marca todas como pagas de uma vez.
 
-- `POST /nf/payment-batches` — multipart `invoice_ids` (csv), `fee`, `data`, `proof`. Valida `aprovada` + mesma moeda, cria `nf_payment_batches` (migration 044) e seta em cada NF `paid_at`/`paid_proof_path`/`batch_payment_id`. **Caminho proprio (`/payment-batches`) pra evitar colisao com `/invoices/{id}/pay`.**
+- `POST /nf/payment-batches` — multipart `invoice_ids` (csv), `fee`, `data`, `conta`, `proof`. Valida `aprovada` + mesma moeda, cria `nf_payment_batches` (migration 044) e seta em cada NF `paid_at`/`paid_proof_path`/`batch_payment_id`. **Caminho proprio (`/payment-batches`) pra evitar colisao com `/invoices/{id}/pay`.**
 - `GET /nf/payment-batches/{id}` (+ `/proof`) — o lote + as NFs que ele quitou. O detalhe da NF mostra **"Pago em lote — mesmo comprovante destas NFs"** (links pras irmas), pra rastrear sem abrir uma a uma.
 - A **taxa** do lote entra como saida de caixa no app **Gerencial** (projecao + conciliacao), pela `data` da transferencia.
 

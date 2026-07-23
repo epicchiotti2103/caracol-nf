@@ -5,6 +5,7 @@ import { X, Loader2, Upload, AlertCircle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
 import { fmtCurrency } from "@/lib/i18n";
+import { CONTAS_POR_MOEDA, CONTA_DEFAULT } from "@/lib/contas";
 import type { Invoice, Moeda } from "@/types";
 
 const PROOF_MAX_MB = 10;
@@ -29,6 +30,8 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [fee, setFee] = useState("40,00");
   const [data, setData] = useState(todayISO());
+  // De qual conta saiu o dinheiro — opcoes dependem da moeda do lote
+  const [conta, setConta] = useState<string>(CONTA_DEFAULT.BRL);
   const [file, setFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -65,10 +68,11 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
     });
   };
 
-  // Trocar de moeda zera a seleção (lote é de moeda única)
+  // Trocar de moeda zera a seleção (lote é de moeda única) e reseta a conta
   const switchMoeda = (m: Moeda) => {
     setMoeda(m);
     setSelected(new Set());
+    setConta(CONTA_DEFAULT[m]);
   };
 
   const allSelected = doMoeda.length > 0 && doMoeda.every((i) => selected.has(i.id));
@@ -90,6 +94,8 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
       fd.append("invoice_ids", selectedInvoices.map((i) => i.id).join(","));
       fd.append("fee", String(feeNum));
       fd.append("data", data);
+      // De qual conta saiu o dinheiro (backend antigo ignora; novo grava)
+      fd.append("conta", conta);
       fd.append("proof", file);
       await apiFetch("/nf/payment-batches", { method: "POST", body: fd });
       toast.success(`${selectedInvoices.length} NF(s) paga(s) em lote.`);
@@ -199,6 +205,20 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
                 inputMode="decimal"
                 className="mt-1 block w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary/50"
               />
+            </label>
+            <label className="text-xs text-muted">
+              Saiu de qual conta?
+              <select
+                value={conta}
+                onChange={(e) => setConta(e.target.value)}
+                className="mt-1 block w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-sm text-foreground outline-none focus:border-primary/50"
+              >
+                {CONTAS_POR_MOEDA[moeda].map((c) => (
+                  <option key={c.value} value={c.value}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="col-span-2 text-xs text-muted sm:col-span-1">
               Comprovante (1 p/ todas)

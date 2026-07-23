@@ -23,6 +23,7 @@ import { useNfRole, useCan, langForRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
 import { fmtCurrency, fmtDate, fmtDateTime, fmtRefMonth } from "@/lib/i18n";
+import { CONTAS_POR_MOEDA, CONTA_DEFAULT } from "@/lib/contas";
 import type { Invoice, NfCampanhaLink, NfUser, Supplier } from "@/types";
 
 type Action = "approve_adm" | "approve_admin" | "reject" | "pay";
@@ -77,6 +78,17 @@ function InvoiceDetail({ id }: { id: string }) {
   // Gerencial sem duplicar); fee 0 = comportamento antigo.
   const [payFee, setPayFee] = useState(DEFAULT_FEE);
   const [payData, setPayData] = useState(todayISO());
+  // De qual conta saiu o dinheiro (por moeda). Default setado ao abrir o modal.
+  const [payConta, setPayConta] = useState<string>(CONTA_DEFAULT.BRL);
+
+  // Ao abrir o modal de pagamento, reseta a conta pro default da moeda da NF
+  // (invoice carrega async, entao nao da pra resolver no useState inicial).
+  useEffect(() => {
+    if (pendingAction === "pay") {
+      setPayConta(CONTA_DEFAULT[invoice?.moeda === "USD" ? "USD" : "BRL"]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingAction, invoice?.moeda]);
   // Bump usado pra refrescar a timeline apos acoes
   const [eventsRefreshKey, setEventsRefreshKey] = useState(0);
   // Lote de pagamento (quais NFs dividem o mesmo comprovante)
@@ -163,6 +175,8 @@ function InvoiceDetail({ id }: { id: string }) {
       lang === "pt" ? "Taxa invalida." : "Invalid fee.",
     payDateLabel:
       lang === "pt" ? "Data da transferencia" : "Transfer date",
+    contaLabel:
+      lang === "pt" ? "Saiu de qual conta?" : "Paid from which account?",
     payTitle: lang === "pt" ? "Marcar NF" : "Mark invoice",
     asPaid: lang === "pt" ? "como paga" : "as paid",
     approveAdm: "Aprovar (adm campanha)",
@@ -469,6 +483,8 @@ function InvoiceDetail({ id }: { id: string }) {
         // Manda o valor normalizado ("40,00" -> "40"); backend defaulta 0.
         fd.append("fee", String(feeNum));
         fd.append("data", payData);
+        // De qual conta saiu o dinheiro (backend antigo ignora; novo grava)
+        fd.append("conta", payConta);
         updated = await apiFetch(`/nf/invoices/${id}/pay`, {
           method: "POST",
           body: fd
@@ -503,6 +519,7 @@ function InvoiceDetail({ id }: { id: string }) {
       setProofError("");
       setPayFee(DEFAULT_FEE);
       setPayData(todayISO());
+      setPayConta(CONTA_DEFAULT[updated?.moeda === "USD" ? "USD" : "BRL"]);
       setEventsRefreshKey((k) => k + 1);
       // Ressincroniza pra pegar campos derivados possivelmente ausentes na resposta direta
       refreshInvoice();
@@ -807,6 +824,8 @@ function InvoiceDetail({ id }: { id: string }) {
           setFee={setPayFee}
           payData={payData}
           setPayData={setPayData}
+          conta={payConta}
+          setConta={setPayConta}
           moeda={invoice.moeda === "USD" ? "USD" : "BRL"}
           loading={acting}
           onCancel={() => {
@@ -818,6 +837,7 @@ function InvoiceDetail({ id }: { id: string }) {
             setProofError("");
             setPayFee(DEFAULT_FEE);
             setPayData(todayISO());
+            setPayConta(CONTA_DEFAULT[invoice.moeda === "USD" ? "USD" : "BRL"]);
           }}
           onConfirm={executeAction}
         />
@@ -1357,6 +1377,8 @@ function ActionModal({
   setFee,
   payData,
   setPayData,
+  conta,
+  setConta,
   moeda,
   loading,
   onCancel,
@@ -1381,6 +1403,8 @@ function ActionModal({
   setFee: (v: string) => void;
   payData: string;
   setPayData: (v: string) => void;
+  conta: string;
+  setConta: (v: string) => void;
   moeda: "BRL" | "USD";
   loading: boolean;
   onCancel: () => void;
@@ -1487,6 +1511,22 @@ function ActionModal({
                     className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
                   />
                 </div>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-foreground">
+                  {t.contaLabel}
+                </label>
+                <select
+                  value={conta}
+                  onChange={(e) => setConta(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-background px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary/60"
+                >
+                  {CONTAS_POR_MOEDA[moeda].map((c) => (
+                    <option key={c.value} value={c.value}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <p className="text-xs text-muted">{t.feeHint}</p>
             </>
