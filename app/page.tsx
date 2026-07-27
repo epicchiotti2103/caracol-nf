@@ -1058,7 +1058,7 @@ function DualCurrencyStatCard({
         <p className="text-lg font-semibold leading-tight text-foreground">
           {fmtCurrency(brl, "BRL", "pt")}
         </p>
-        <p className="text-sm font-medium leading-tight text-foreground/80">
+        <p className="text-lg font-semibold leading-tight text-foreground">
           {fmtCurrency(usd, "USD", "pt")}
         </p>
         {sub && <p className="mt-0.5 text-xs text-muted">{sub}</p>}

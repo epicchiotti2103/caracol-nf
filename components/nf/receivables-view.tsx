@@ -609,7 +609,7 @@ function ReceivableStatCard({
         <p className="mt-0.5 text-sm font-medium leading-tight text-foreground/90">
           {fmtCurrency(brl, "BRL", "pt")}
         </p>
-        <p className="text-xs font-medium leading-tight text-foreground/70">
+        <p className="text-sm font-medium leading-tight text-foreground/90">
           {fmtCurrency(usd, "USD", "pt")}
         </p>
       </div>
