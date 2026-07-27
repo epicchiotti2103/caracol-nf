@@ -63,6 +63,40 @@ export function formatCampanhaLabel(
   return parts.join(" — ") || (c as any).campanha_id || "(campanha)";
 }
 
+// Chave unica de uma sugestao do fechamento. O estado do form (e o payload do
+// backend) sao keyed por campanha_id, entao a moeda so entra pra separar o caso
+// raro de mesma campanha com moedas diferentes — que nao pode ser somado.
+function sugestaoKey(item: FechamentoSugestaoItem): string {
+  return `${item.campanha_id}::${item.moeda || ""}`;
+}
+
+/**
+ * Defensivo: o backend agrega as sugestoes por campanha, mas se voltar a mandar
+ * granularidade (campanha, publisher) o mesmo campanha_id aparece 2x — e como o
+ * estado e keyed por campanha_id, um checkbox controlaria as duas linhas.
+ * Aqui consolidamos na chegada SOMANDO valor_sugerido; demais campos ficam com
+ * os do primeiro item. Moedas diferentes nao sao somadas (linhas separadas).
+ */
+function dedupSugestoes(
+  items: FechamentoSugestaoItem[]
+): FechamentoSugestaoItem[] {
+  const byKey = new Map<string, FechamentoSugestaoItem>();
+  for (const it of items) {
+    const key = sugestaoKey(it);
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, { ...it });
+      continue;
+    }
+    // So arredonda quando de fato houve merge — o caminho sem duplicata fica
+    // byte-a-byte igual ao que o backend mandou.
+    const soma =
+      (Number(existing.valor_sugerido) || 0) + (Number(it.valor_sugerido) || 0);
+    existing.valor_sugerido = Math.round(soma * 100) / 100;
+  }
+  return Array.from(byKey.values());
+}
+
 function formatMesRef(s: string | null | undefined): string {
   if (!s) return "";
   const ym = s.length >= 7 ? s.slice(0, 7) : s;
@@ -132,7 +166,7 @@ export function NfTagCampanhaFields({
           );
         const items = Array.isArray(res) ? res : res?.items || [];
         if (!cancelled) {
-          setSuggestions(items);
+          setSuggestions(dedupSugestoes(items));
           setSugUnavailable(false);
         }
       } catch {
@@ -355,7 +389,7 @@ export function NfTagCampanhaFields({
                       const sugMoeda = item.moeda || moeda;
                       return (
                         <div
-                          key={item.campanha_id}
+                          key={sugestaoKey(item)}
                           className="flex items-center gap-2"
                         >
                           <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
