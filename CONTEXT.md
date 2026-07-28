@@ -230,7 +230,7 @@ NEXT_PUBLIC_HUB_URL=https://app.aeobr.com.br
 - [x] Fornecedor central: toda NF aponta pra um fornecedor cadastrado (`supplier_id`); `is_publisher`/`user_id` viraram atributos do fornecedor; admin/adm_campanha tem `<select>` obrigatorio de fornecedor no `/invoice/new`, usuario comum/linkado nao escolhe (backend amarra). `publisher_id` deprecado. Detalhe mostra "Cadastrado por: X" (submitted_by)
 - [x] Dashboard admin (em_analise_count, a_pagar_amount, pagas_30d_amount) — agora com 2 linhas R$/US$ nos stat cards "A pagar" e "Pagas (30d)"
 - [x] Moeda por NF (BRL/USD): dropdown obrigatorio no form, prefix dinamico no campo Valor, totais separados no rodape da lista e nos stat cards do dashboard
-- [x] Marcar NF como paga exige **comprovante** (modal de upload PNG/JPEG/PDF max 10MB → multipart pra `POST /pay`); detalhe exibe botao "Baixar comprovante" quando `paid_proof_path` esta setado (consome `GET /nf/invoices/{id}/proof`)
+- [x] Marcar NF como paga exige **comprovante** (modal de upload PNG/JPEG/PDF max 10MB → multipart pra `POST /pay`); detalhe exibe botao "Baixar comprovante" quando `paid_proof_path` esta setado (consome `GET /nf/invoices/{id}/proof`). **Assimetria proposital**: no lado **a receber**, o comprovante e **opcional** no modal "marcar como recebida" (`POST /nf/receivables/{id}/receive`, multipart com `proof` opcional) — a listagem so mostra "Baixar comprovante" quando `received_proof_path` esta setado
 - [x] Gestao de papeis intra-NF (`/admin/usuarios-nf`)
 - [x] Logo Caracol clicavel volta pro Hub
 - [x] Campanhas como entidade propria: NF vincula campanhas via bloco estruturado (busca por mes + texto, valor por campanha). Campo texto livre `campaign_name` removido do front (deprecated no backend)
