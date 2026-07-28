@@ -82,9 +82,11 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
 
   const submit = async () => {
     if (selectedInvoices.length === 0) return setError("Selecione ao menos uma NF.");
-    if (!file) return setError("Anexe o comprovante da transferência.");
-    if (!PROOF_TYPES.includes(file.type)) return setError("Comprovante deve ser PNG, JPEG ou PDF.");
-    if (file.size > PROOF_MAX_MB * 1024 * 1024) return setError("Comprovante excede 10MB.");
+    // Comprovante e OPCIONAL — so valida formato/tamanho se anexaram algo.
+    if (file && !PROOF_TYPES.includes(file.type))
+      return setError("Comprovante deve ser PNG, JPEG ou PDF.");
+    if (file && file.size > PROOF_MAX_MB * 1024 * 1024)
+      return setError("Comprovante excede 10MB.");
     if (feeNum < 0) return setError("Taxa inválida.");
 
     setSaving(true);
@@ -96,13 +98,23 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
       fd.append("data", data);
       // De qual conta saiu o dinheiro (backend antigo ignora; novo grava)
       fd.append("conta", conta);
-      fd.append("proof", file);
+      // Um comprovante para TODAS as NFs do lote. Sendo opcional, ou todas
+      // recebem o mesmo path ou nenhuma recebe — nunca um subconjunto.
+      if (file) fd.append("proof", file);
       await apiFetch("/nf/payment-batches", { method: "POST", body: fd });
       toast.success(`${selectedInvoices.length} NF(s) paga(s) em lote.`);
       onPaid();
       onClose();
     } catch (err: any) {
-      setError(err?.message || "Falha ao pagar em lote.");
+      // 422 do FastAPI devolve `detail` como array de objetos; o apiFetch faz
+      // `new Error(detail)` e a mensagem vira "[object Object]". Coage pra algo
+      // legivel (backend antigo, ainda sem restart, exige o comprovante).
+      const raw = typeof err?.message === "string" ? err.message : "";
+      setError(
+        raw && !raw.includes("[object Object]")
+          ? raw
+          : "Falha ao pagar em lote. Tente novamente ou anexe o comprovante."
+      );
     } finally {
       setSaving(false);
     }
@@ -116,7 +128,7 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
           <div>
             <h2 className="text-base font-semibold text-foreground">Pagar em lote</h2>
             <p className="text-xs text-muted">
-              Quita várias NFs numa transferência: 1 comprovante para todas + a taxa.
+              Quita várias NFs numa transferência: 1 comprovante (opcional) para todas + a taxa.
             </p>
           </div>
           <button onClick={onClose} className="rounded-lg p-1.5 text-muted hover:bg-background hover:text-foreground">
@@ -221,10 +233,13 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
               </select>
             </label>
             <label className="col-span-2 text-xs text-muted sm:col-span-1">
-              Comprovante (1 p/ todas)
+              Comprovante (1 p/ todas, opcional)
               <div className="mt-1 flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5">
                 <Upload className="h-3.5 w-3.5 flex-shrink-0 text-muted" />
                 <input
+                  // remonta o input ao limpar, senao re-selecionar o mesmo
+                  // arquivo nao dispara onChange (value do input fica preso)
+                  key={file ? file.name : "empty"}
                   type="file"
                   accept="image/png,image/jpeg,application/pdf"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
@@ -234,7 +249,18 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
             </label>
           </div>
 
-          {file && <p className="mb-2 truncate text-xs text-muted">Arquivo: {file.name}</p>}
+          {file && (
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <p className="min-w-0 flex-1 truncate text-xs text-muted">Arquivo: {file.name}</p>
+              <button
+                type="button"
+                onClick={() => setFile(null)}
+                className="flex-shrink-0 text-xs font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
+              >
+                Remover anexo
+              </button>
+            </div>
+          )}
 
           {error && (
             <div className="mb-2 flex items-start gap-2 rounded-lg border border-danger/20 bg-danger/10 p-2">
@@ -268,7 +294,7 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
             </button>
             <button
               onClick={submit}
-              disabled={saving || selectedInvoices.length === 0 || !file}
+              disabled={saving || selectedInvoices.length === 0}
               className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-black hover:bg-primary/90 disabled:opacity-50"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}

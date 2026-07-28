@@ -19,7 +19,8 @@ interface Props {
  *
  * Backend: POST /api/v1/nf/receivables/{id}/receive (multipart, campo `proof`
  * PNG/JPEG/PDF max 10MB **opcional**). So funciona em status=pendente.
- * Diferente da NF a pagar, onde o comprovante continua obrigatorio.
+ * Simetrico ao lado a pagar, onde o comprovante tambem e opcional (o PDF da
+ * nota, esse sim, continua obrigatorio no cadastro).
  */
 export function ReceivableReceiveModal({ receivable, onClose, onSaved }: Props) {
   const [proof, setProof] = useState<File | null>(null);

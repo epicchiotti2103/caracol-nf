@@ -149,12 +149,15 @@ function InvoiceDetail({ id }: { id: string }) {
       lang === "pt" ? "Baixar comprovante" : "Download proof",
     proofLabel:
       lang === "pt"
-        ? "Anexe o comprovante de pagamento (PNG, JPEG ou PDF, max 10MB)"
-        : "Attach the payment proof (PNG, JPEG or PDF, max 10MB)",
+        ? "Se quiser, anexe o comprovante de pagamento (PNG, JPEG ou PDF, max 10MB) — e opcional."
+        : "If you want, attach the payment proof (PNG, JPEG or PDF, max 10MB) — it is optional.",
     proofFileLabel:
-      lang === "pt" ? "Comprovante" : "Proof",
-    proofRequired:
-      lang === "pt" ? "Anexe o comprovante." : "Attach the proof.",
+      lang === "pt" ? "Comprovante (opcional)" : "Proof (optional)",
+    proofRemove: lang === "pt" ? "Remover anexo" : "Remove attachment",
+    payFailed:
+      lang === "pt"
+        ? "Falha ao marcar como paga. Tente novamente ou anexe o comprovante."
+        : "Failed to mark as paid. Try again or attach the proof.",
     proofTooBig:
       lang === "pt"
         ? `Arquivo muito grande (max ${PROOF_MAX_MB}MB).`
@@ -457,20 +460,18 @@ function InvoiceDetail({ id }: { id: string }) {
         });
         successMsg = t.approvedOk;
       } else if (pendingAction === "pay") {
-        if (!proofFile) {
-          setProofError(t.proofRequired);
-          setActing(false);
-          return;
-        }
-        if (!PROOF_MIMES.has(proofFile.type)) {
-          setProofError(t.proofWrongType);
-          setActing(false);
-          return;
-        }
-        if (proofFile.size > PROOF_MAX_MB * 1024 * 1024) {
-          setProofError(t.proofTooBig);
-          setActing(false);
-          return;
+        // Comprovante e OPCIONAL — so valida formato/tamanho se o admin anexou algo.
+        if (proofFile) {
+          if (!PROOF_MIMES.has(proofFile.type)) {
+            setProofError(t.proofWrongType);
+            setActing(false);
+            return;
+          }
+          if (proofFile.size > PROOF_MAX_MB * 1024 * 1024) {
+            setProofError(t.proofTooBig);
+            setActing(false);
+            return;
+          }
         }
         const feeNum = parseFee(payFee);
         if (feeNum < 0) {
@@ -479,7 +480,9 @@ function InvoiceDetail({ id }: { id: string }) {
           return;
         }
         const fd = new FormData();
-        fd.append("proof", proofFile);
+        // So vai no payload quando existe — sem anexo o backend grava
+        // paid_proof_path null (e o botao "Baixar comprovante" nao aparece).
+        if (proofFile) fd.append("proof", proofFile);
         // Manda o valor normalizado ("40,00" -> "40"); backend defaulta 0.
         fd.append("fee", String(feeNum));
         fd.append("data", payData);
@@ -524,7 +527,21 @@ function InvoiceDetail({ id }: { id: string }) {
       // Ressincroniza pra pegar campos derivados possivelmente ausentes na resposta direta
       refreshInvoice();
     } catch (err: any) {
-      toast.error(err?.message || (lang === "pt" ? "Falha." : "Failed."));
+      // 422 do FastAPI devolve `detail` como array de objetos; o apiFetch faz
+      // `new Error(detail)` e a mensagem vira "[object Object]". Coage pra algo
+      // legivel (acontece enquanto o backend antigo, que ainda exige o
+      // comprovante, nao foi reiniciado na VM).
+      const raw = typeof err?.message === "string" ? err.message : "";
+      const readable =
+        raw && !raw.includes("[object Object]")
+          ? raw
+          : pendingAction === "pay"
+            ? t.payFailed
+            : lang === "pt"
+              ? "Falha."
+              : "Failed.";
+      if (pendingAction === "pay") setProofError(readable);
+      toast.error(readable);
     } finally {
       setActing(false);
     }
@@ -696,9 +713,13 @@ function InvoiceDetail({ id }: { id: string }) {
         {invoice.batch_payment_id && batchSiblings && batchSiblings.length > 1 && (
           <div className="border-t border-border pt-4">
             <p className="text-sm font-medium text-foreground">
-              {lang === "pt"
-                ? "Pago em lote — mesmo comprovante destas NFs:"
-                : "Paid in a batch — same proof for these invoices:"}
+              {invoice.paid_proof_path
+                ? lang === "pt"
+                  ? "Pago em lote — mesmo comprovante destas NFs:"
+                  : "Paid in a batch — same proof for these invoices:"
+                : lang === "pt"
+                  ? "Pago em lote junto destas NFs:"
+                  : "Paid in a batch alongside these invoices:"}
             </p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {batchSiblings.map((s) => (
@@ -1471,18 +1492,30 @@ function ActionModal({
               <p className="text-sm text-muted">{t.proofLabel}</p>
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-foreground">
-                  {t.proofFileLabel} <span className="text-primary">*</span>
+                  {t.proofFileLabel}
                 </label>
                 <input
+                  // remonta o input ao limpar, senao re-selecionar o mesmo
+                  // arquivo nao dispara onChange (value do input fica preso)
+                  key={proofFile ? proofFile.name : "empty"}
                   type="file"
                   accept={PROOF_ACCEPT}
                   onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
                   className="block w-full text-sm text-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-2 file:text-sm file:font-semibold file:text-black hover:file:opacity-90"
                 />
                 {proofFile && (
-                  <p className="mt-1 text-xs text-muted">
-                    {proofFile.name} · {(proofFile.size / 1024 / 1024).toFixed(2)} MB
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <p className="text-xs text-muted">
+                      {proofFile.name} · {(proofFile.size / 1024 / 1024).toFixed(2)} MB
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setProofFile(null)}
+                      className="text-xs font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
+                    >
+                      {t.proofRemove}
+                    </button>
+                  </div>
                 )}
                 {proofError && (
                   <p className="mt-1 text-xs text-danger">{proofError}</p>
@@ -1573,11 +1606,7 @@ function ActionModal({
             </button>
             <button
               onClick={onConfirm}
-              disabled={
-                loading ||
-                (action === "reject" && !rejectNotes.trim()) ||
-                (action === "pay" && !proofFile)
-              }
+              disabled={loading || (action === "reject" && !rejectNotes.trim())}
               className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
             >
               {loading ? (
