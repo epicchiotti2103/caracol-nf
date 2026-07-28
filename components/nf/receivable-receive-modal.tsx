@@ -17,8 +17,9 @@ interface Props {
 /**
  * Modal de marcar NF a Receber como recebida.
  *
- * Backend: POST /api/v1/nf/receivables/{id}/receive (multipart obrigatorio,
- * campo `proof` PNG/JPEG/PDF max 10MB). So funciona em status=pendente.
+ * Backend: POST /api/v1/nf/receivables/{id}/receive (multipart, campo `proof`
+ * PNG/JPEG/PDF max 10MB **opcional**). So funciona em status=pendente.
+ * Diferente da NF a pagar, onde o comprovante continua obrigatorio.
  */
 export function ReceivableReceiveModal({ receivable, onClose, onSaved }: Props) {
   const [proof, setProof] = useState<File | null>(null);
@@ -26,12 +27,14 @@ export function ReceivableReceiveModal({ receivable, onClose, onSaved }: Props) 
   const [error, setError] = useState("");
 
   const validate = (): string | null => {
-    if (!proof) return "Selecione o comprovante.";
-    if (!ALLOWED_MIME.includes(proof.type)) {
-      return "Formato invalido (aceitos: PNG, JPEG, PDF).";
-    }
-    if (proof.size > MAX_PROOF_MB * 1024 * 1024) {
-      return `Arquivo excede ${MAX_PROOF_MB}MB.`;
+    // Comprovante e opcional — so valida se o usuario anexou algo.
+    if (proof) {
+      if (!ALLOWED_MIME.includes(proof.type)) {
+        return "Formato invalido (aceitos: PNG, JPEG, PDF).";
+      }
+      if (proof.size > MAX_PROOF_MB * 1024 * 1024) {
+        return `Arquivo excede ${MAX_PROOF_MB}MB.`;
+      }
     }
     return null;
   };
@@ -43,18 +46,24 @@ export function ReceivableReceiveModal({ receivable, onClose, onSaved }: Props) 
       setError(v);
       return;
     }
-    if (!proof) return;
     setSaving(true);
     try {
       const fd = new FormData();
-      fd.append("proof", proof);
+      if (proof) fd.append("proof", proof);
       const saved: NfReceivable = await apiFetch(
         `/nf/receivables/${receivable.id}/receive`,
         { method: "POST", body: fd }
       );
       onSaved(saved);
     } catch (err: any) {
-      setError(err?.message || "Falha ao marcar como recebida.");
+      // Backend antigo (ainda sem restart) devolve 422 com `detail` em array —
+      // `err.message` vira "[object Object]". Cai no fallback legivel.
+      const raw = typeof err?.message === "string" ? err.message : "";
+      setError(
+        raw && !raw.includes("[object Object]")
+          ? raw
+          : "Falha ao marcar como recebida. Tente novamente ou anexe o comprovante."
+      );
     } finally {
       setSaving(false);
     }
@@ -85,8 +94,9 @@ export function ReceivableReceiveModal({ receivable, onClose, onSaved }: Props) 
 
         <div className="space-y-4 p-6">
           <p className="text-sm text-muted">
-            Anexe o comprovante de pagamento (PIX/TED/PDF). Aceita PNG, JPEG ou
-            PDF, max {MAX_PROOF_MB}MB.
+            Se quiser, anexe o comprovante de pagamento (PIX/TED/PDF) — e{" "}
+            <span className="text-foreground">opcional</span>. Aceita PNG, JPEG
+            ou PDF, max {MAX_PROOF_MB}MB.
           </p>
 
           <label
@@ -115,12 +125,15 @@ export function ReceivableReceiveModal({ receivable, onClose, onSaved }: Props) 
                     Clique para selecionar
                   </p>
                   <p className="mt-0.5 text-xs text-muted">
-                    Comprovante — max. {MAX_PROOF_MB} MB
+                    Comprovante (opcional) — max. {MAX_PROOF_MB} MB
                   </p>
                 </div>
               </>
             )}
             <input
+              // remonta o input ao limpar, senao re-selecionar o mesmo arquivo
+              // nao dispara onChange (value do input fica preso)
+              key={proof ? proof.name : "empty"}
               id="receivable-proof"
               type="file"
               accept="image/png,image/jpeg,application/pdf"
@@ -128,6 +141,16 @@ export function ReceivableReceiveModal({ receivable, onClose, onSaved }: Props) 
               onChange={(e) => setProof(e.target.files?.[0] ?? null)}
             />
           </label>
+
+          {proof && (
+            <button
+              type="button"
+              onClick={() => setProof(null)}
+              className="text-xs font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Remover anexo
+            </button>
+          )}
 
           {error && (
             <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">
@@ -146,7 +169,7 @@ export function ReceivableReceiveModal({ receivable, onClose, onSaved }: Props) 
           </button>
           <button
             onClick={onSubmit}
-            disabled={saving || !proof}
+            disabled={saving}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-primary py-2.5 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
           >
             {saving ? (
