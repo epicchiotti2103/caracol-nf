@@ -33,6 +33,11 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
   // De qual conta saiu o dinheiro — opcoes dependem da moeda do lote
   const [conta, setConta] = useState<string>(CONTA_DEFAULT.BRL);
   const [file, setFile] = useState<File | null>(null);
+  // Contador so pra remontar o <input type="file"> quando o usuario REMOVE o
+  // anexo — sem isso, re-selecionar o mesmo arquivo nao dispara onChange.
+  // Nao pode depender do nome: o input e visivel (`file:hidden` deixa so o
+  // texto nativo), e remontar ao SELECIONAR apagaria o nome da tela.
+  const [fileInputKey, setFileInputKey] = useState(0);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -237,9 +242,7 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
               <div className="mt-1 flex items-center gap-2 rounded-lg border border-border bg-background px-2.5 py-1.5">
                 <Upload className="h-3.5 w-3.5 flex-shrink-0 text-muted" />
                 <input
-                  // remonta o input ao limpar, senao re-selecionar o mesmo
-                  // arquivo nao dispara onChange (value do input fica preso)
-                  key={file ? file.name : "empty"}
+                  key={fileInputKey}
                   type="file"
                   accept="image/png,image/jpeg,application/pdf"
                   onChange={(e) => setFile(e.target.files?.[0] ?? null)}
@@ -254,7 +257,10 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
               <p className="min-w-0 flex-1 truncate text-xs text-muted">Arquivo: {file.name}</p>
               <button
                 type="button"
-                onClick={() => setFile(null)}
+                onClick={() => {
+                  setFile(null);
+                  setFileInputKey((k) => k + 1);
+                }}
                 className="flex-shrink-0 text-xs font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
               >
                 Remover anexo

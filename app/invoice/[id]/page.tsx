@@ -638,7 +638,10 @@ function InvoiceDetail({ id }: { id: string }) {
           onApproveAdm={() => setPendingAction("approve_adm")}
           onApproveAdmin={() => setPendingAction("approve_admin")}
           onReject={() => setPendingAction("reject")}
-          onPay={() => setPendingAction("pay")}
+          onPay={() => {
+            setProofError("");
+            setPendingAction("pay");
+          }}
         />
       )}
 
@@ -1434,6 +1437,12 @@ function ActionModal({
   const isApproveAdminDouble =
     action === "approve_admin" && adminCompletingFlow;
 
+  // Contador so pra remontar o <input type="file"> quando o usuario REMOVE o
+  // anexo — sem isso, re-selecionar o mesmo arquivo nao dispara onChange.
+  // Nao pode depender do nome do arquivo: o input e visivel aqui, e remontar
+  // ao SELECIONAR zeraria o texto nativo ("Nenhum arquivo escolhido").
+  const [proofInputKey, setProofInputKey] = useState(0);
+
   const title =
     action === "reject"
       ? t.confirmReject
@@ -1495,9 +1504,7 @@ function ActionModal({
                   {t.proofFileLabel}
                 </label>
                 <input
-                  // remonta o input ao limpar, senao re-selecionar o mesmo
-                  // arquivo nao dispara onChange (value do input fica preso)
-                  key={proofFile ? proofFile.name : "empty"}
+                  key={proofInputKey}
                   type="file"
                   accept={PROOF_ACCEPT}
                   onChange={(e) => setProofFile(e.target.files?.[0] ?? null)}
@@ -1510,7 +1517,10 @@ function ActionModal({
                     </p>
                     <button
                       type="button"
-                      onClick={() => setProofFile(null)}
+                      onClick={() => {
+                        setProofFile(null);
+                        setProofInputKey((k) => k + 1);
+                      }}
                       className="text-xs font-medium text-muted underline-offset-2 hover:text-foreground hover:underline"
                     >
                       {t.proofRemove}
