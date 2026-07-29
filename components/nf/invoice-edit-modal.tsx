@@ -71,9 +71,11 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
   const [competencias, setCompetencias] = useState<CompetenciaDraft[]>(
     () => initialCompetencias
   );
-  // NF que declara mais de uma competencia: mudar o valor exige re-declarar a
-  // distribuicao (o backend 400 se vier `amount` sem `competencias`).
-  const isMultiCompetencia = (invoice.competencias?.length ?? 0) > 1;
+  // NF que ja tem competencias declaradas: mudar o valor exige re-declarar a
+  // distribuicao — com 2+ o backend 400 se vier `amount` sozinho, e com 1 o
+  // valor da competencia ficaria desatualizado em silencio (soma != amount).
+  // NF antiga (backend sem o campo) => false => PATCH identico ao de antes.
+  const hasDeclaredCompetencias = (invoice.competencias?.length ?? 0) >= 1;
 
   // NF a Pagar sempre aponta pra um fornecedor cadastrado (supplier_id).
   const [supplierId, setSupplierId] = useState(invoice.supplier_id || "");
@@ -145,7 +147,7 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
     const parsedAmount = !isNaN(parsed) ? parsed : initialAmount;
     const competenciaChanged =
       competenciaSignature(competencias, parsedAmount) !== initialCompetenciaSignature;
-    if (competenciaChanged || (isMultiCompetencia && out.amount != null)) {
+    if (competenciaChanged || (hasDeclaredCompetencias && out.amount != null)) {
       out.competencias = competenciasToPayload(competencias, parsedAmount);
     }
     // Ancora de compat (menor competencia) acompanha a lista.
@@ -180,7 +182,7 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
     initialCampanhaPayload,
     initialCompetenciaSignature,
     initialAmount,
-    isMultiCompetencia,
+    hasDeclaredCompetencias,
     invoice,
     initialMoeda
   ]);
