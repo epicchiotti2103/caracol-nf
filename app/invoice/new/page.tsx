@@ -21,31 +21,24 @@ import {
   type CampanhaLinkDraft
 } from "@/components/nf/nf-tag-campanha-fields";
 import { ConciliacaoPanel } from "@/components/nf/conciliacao-panel";
+import {
+  CompetenciaFields,
+  anchorCompetencia,
+  competenciasToPayload,
+  validateCompetencias,
+  type CompetenciaDraft
+} from "@/components/nf/competencia-fields";
+import { DuplicidadePanel } from "@/components/nf/duplicidade-panel";
+import { DuplicateConfirmModal } from "@/components/nf/duplicate-confirm-modal";
+import {
+  apiFetchStrict,
+  duplicateDetail,
+  readableError,
+  type DuplicateDetail
+} from "@/lib/api-error";
 import type { Supplier } from "@/types";
 
 const MAX_PDF_MB = 10;
-
-// Gera opcoes do dropdown Mes de referencia: 12 passados + atual + 3 futuros.
-// Safari/Firefox nao suportam <input type="month"> nativamente — viram texto
-// livre. Dropdown explicito garante UX consistente em todos os browsers + bate
-// exato com o filtro do dashboard (formato YYYY-MM).
-function buildRefMonthOptions(lang: "pt" | "en"): Array<{ value: string; label: string }> {
-  const opts: Array<{ value: string; label: string }> = [];
-  const today = new Date();
-  today.setDate(1);
-  const locale = lang === "pt" ? "pt-BR" : "en-US";
-  const formatter = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric" });
-  for (let i = 12; i >= -3; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const value = `${y}-${m}`;
-    const labelRaw = formatter.format(d);
-    const label = labelRaw.charAt(0).toUpperCase() + labelRaw.slice(1);
-    opts.push({ value, label });
-  }
-  return opts.reverse(); // mais recente primeiro
-}
 
 export default function NewInvoicePage() {
   return (
@@ -70,7 +63,11 @@ function NewInvoiceForm() {
   const [amount, setAmount] = useState("");
   const [moeda, setMoeda] = useState<"BRL" | "USD">("BRL");
   const [dueDate, setDueDate] = useState("");
-  const [refMonth, setRefMonth] = useState(""); // YYYY-MM
+  // Competencias da NF (>=1 linha). Com 1 linha o valor acompanha o total da NF
+  // automaticamente — o fluxo de 1 mes continua sendo so escolher o mes.
+  const [competencias, setCompetencias] = useState<CompetenciaDraft[]>([
+    { competencia: "", valor: "" }
+  ]);
   const [pdf, setPdf] = useState<File | null>(null);
 
   // Tag (1 por NF) + vinculo de campanhas (N, cada uma com valor).
@@ -89,6 +86,10 @@ function NewInvoiceForm() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
   const [warnDate, setWarnDate] = useState("");
+  // 409 estruturado devolvido pelo POST (bloqueio de numero ou aviso de duplicata)
+  const [dupDetail, setDupDetail] = useState<DuplicateDetail | null>(null);
+
+  const amountNum = parseFloat((amount || "").replace(",", ".")) || 0;
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -176,7 +177,8 @@ function NewInvoiceForm() {
     const amt = parseFloat(amount.replace(",", "."));
     if (isNaN(amt) || amt <= 0) return labels.amountGt0;
     if (!dueDate) return labels.dueDate + " — " + labels.required;
-    if (!refMonth) return labels.refMonth + " — " + labels.required;
+    const compErr = validateCompetencias(competencias, amt, lang, moeda);
+    if (compErr) return compErr;
     if (pdf && pdf.size > MAX_PDF_MB * 1024 * 1024) return labels.pdfTooBig;
     return null;
   };
@@ -193,6 +195,63 @@ function NewInvoiceForm() {
     }
   };
 
+  // FormData montada do zero a cada tentativa (nunca reaproveita a anterior,
+  // pra nao duplicar `confirm_duplicate` no reenvio).
+  const buildFormData = (confirmDuplicate: boolean): FormData => {
+    const fd = new FormData();
+    fd.append("invoice_number", invoiceNumber.trim());
+    fd.append("amount", String(amountNum));
+    fd.append("moeda", moeda);
+    fd.append("due_date", dueDate);
+    const compPayload = competenciasToPayload(competencias, amountNum);
+    // Ancora de compat: menor competencia declarada (backend espera o 1o dia).
+    const anchor = anchorCompetencia(competencias);
+    if (anchor) fd.append("reference_month", `${anchor}-01`);
+    if (compPayload.length > 0) {
+      fd.append("competencias_json", JSON.stringify(compPayload));
+    }
+    // Admin/adm_campanha escolhem o fornecedor. Usuario comum/linkado nao
+    // manda supplier_id — o backend amarra na entidade do usuario logado.
+    if (isAdmin && supplierId) {
+      fd.append("supplier_id", supplierId);
+    }
+    if (tagId) fd.append("tag_id", tagId);
+    const campanhasPayload = draftsToPayload(campanhaLinks);
+    if (campanhasPayload.length > 0) {
+      fd.append("campanhas_json", JSON.stringify(campanhasPayload));
+    }
+    if (pdf) fd.append("pdf", pdf);
+    if (confirmDuplicate) fd.append("confirm_duplicate", "true");
+    return fd;
+  };
+
+  const doSubmit = async (confirmDuplicate: boolean) => {
+    setSubmitting(true);
+    try {
+      await apiFetchStrict("/nf/invoices", {
+        method: "POST",
+        body: buildFormData(confirmDuplicate)
+      });
+      toast.success(labels.toastOk);
+      setDupDetail(null);
+      setSuccess(true);
+    } catch (err: any) {
+      const dup = duplicateDetail(err);
+      if (dup) {
+        // 409 estruturado: bloqueio (numero repetido) ou aviso (PDF/competencia).
+        setDupDetail(dup);
+        setError("");
+      } else {
+        setDupDetail(null);
+        setError(
+          readableError(err, lang === "pt" ? "Falha ao enviar." : "Failed to send.")
+        );
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
@@ -201,36 +260,7 @@ function NewInvoiceForm() {
       setError(v);
       return;
     }
-    setSubmitting(true);
-    try {
-      const fd = new FormData();
-      fd.append("invoice_number", invoiceNumber.trim());
-      fd.append("amount", String(parseFloat(amount.replace(",", "."))));
-      fd.append("moeda", moeda);
-      fd.append("due_date", dueDate);
-      // refMonth pode chegar como YYYY-MM; backend espera ISO de primeiro dia do mes
-      const refIso = refMonth.length === 7 ? `${refMonth}-01` : refMonth;
-      fd.append("reference_month", refIso);
-      // Admin/adm_campanha escolhem o fornecedor. Usuario comum/linkado nao
-      // manda supplier_id — o backend amarra na entidade do usuario logado.
-      if (isAdmin && supplierId) {
-        fd.append("supplier_id", supplierId);
-      }
-      if (tagId) fd.append("tag_id", tagId);
-      const campanhasPayload = draftsToPayload(campanhaLinks);
-      if (campanhasPayload.length > 0) {
-        fd.append("campanhas_json", JSON.stringify(campanhasPayload));
-      }
-      if (pdf) fd.append("pdf", pdf);
-
-      await apiFetch("/nf/invoices", { method: "POST", body: fd });
-      toast.success(labels.toastOk);
-      setSuccess(true);
-    } catch (err: any) {
-      setError(err?.message || (lang === "pt" ? "Falha ao enviar." : "Failed to send."));
-    } finally {
-      setSubmitting(false);
-    }
+    await doSubmit(false);
   };
 
   if (success) {
@@ -248,7 +278,7 @@ function NewInvoiceForm() {
               setInvoiceNumber("");
               setAmount("");
               setDueDate("");
-              setRefMonth("");
+              setCompetencias([{ competencia: "", valor: "" }]);
               setPdf(null);
               setSupplierId("");
               setMoeda("BRL");
@@ -399,24 +429,14 @@ function NewInvoiceForm() {
           </div>
         </div>
 
-        <div>
-          <label className="mb-1.5 block text-sm font-medium text-foreground">
-            {labels.refMonth} <span className="text-primary">*</span>
-          </label>
-          <select
-            value={refMonth}
-            onChange={(e) => setRefMonth(e.target.value)}
-            className={inputCls}
-          >
-            <option value="">{lang === "pt" ? "Selecione o mes" : "Select a month"}</option>
-            {buildRefMonthOptions(lang).map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <p className="mt-1.5 text-xs text-muted">{labels.refMonthHint}</p>
-        </div>
+        <CompetenciaFields
+          drafts={competencias}
+          onChange={setCompetencias}
+          totalNf={amountNum}
+          moeda={moeda}
+          lang={lang}
+          inputCls={inputCls}
+        />
 
         <NfTagCampanhaFields
           tagId={tagId}
@@ -433,6 +453,18 @@ function NewInvoiceForm() {
             supplierId={supplierId}
             moeda={moeda}
             campanhas={campanhaLinks}
+          />
+        )}
+
+        {/* Informativo: NF/PDF/competencia ja cadastrados pra esse fornecedor.
+            So faz sentido pra quem escolhe o fornecedor na tela. */}
+        {isAdmin && (
+          <DuplicidadePanel
+            supplierId={supplierId}
+            invoiceNumber={invoiceNumber}
+            amount={amountNum}
+            competencias={competencias.map((c) => c.competencia)}
+            moeda={moeda}
           />
         )}
 
@@ -501,6 +533,16 @@ function NewInvoiceForm() {
           </button>
         </div>
       </form>
+
+      {dupDetail && (
+        <DuplicateConfirmModal
+          detail={dupDetail}
+          moeda={moeda}
+          loading={submitting}
+          onCancel={() => setDupDetail(null)}
+          onConfirm={() => doSubmit(true)}
+        />
+      )}
     </div>
   );
 }

@@ -10,30 +10,19 @@ import {
   type CampanhaLinkDraft
 } from "@/components/nf/nf-tag-campanha-fields";
 import { ConciliacaoPanel } from "@/components/nf/conciliacao-panel";
+import {
+  CompetenciaFields,
+  anchorCompetencia,
+  competenciasToDrafts,
+  competenciasToPayload,
+  validateCompetencias,
+  type CompetenciaDraft
+} from "@/components/nf/competencia-fields";
+import { DuplicidadePanel } from "@/components/nf/duplicidade-panel";
+import { readableError } from "@/lib/api-error";
 import type { Invoice, Supplier } from "@/types";
 
 const MAX_BR_DATE_LEN = 10;
-
-// Opcoes do dropdown Mes de referencia (mesma logica do /invoice/new).
-function buildRefMonthOptions(): Array<{ value: string; label: string }> {
-  const opts: Array<{ value: string; label: string }> = [];
-  const today = new Date();
-  today.setDate(1);
-  const formatter = new Intl.DateTimeFormat("pt-BR", {
-    month: "long",
-    year: "numeric"
-  });
-  for (let i = 12; i >= -3; i--) {
-    const d = new Date(today.getFullYear(), today.getMonth() - i, 1);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const value = `${y}-${m}`;
-    const raw = formatter.format(d);
-    const label = raw.charAt(0).toUpperCase() + raw.slice(1);
-    opts.push({ value, label });
-  }
-  return opts.reverse();
-}
 
 interface Props {
   invoice: Invoice;
@@ -54,7 +43,6 @@ interface Props {
  */
 export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
   const initialMoeda = (invoice.moeda || "BRL") as "BRL" | "USD";
-  const initialRef = (invoice.reference_month || "").slice(0, 7);
 
   const [invoiceNumber, setInvoiceNumber] = useState(invoice.invoice_number || "");
   const [amount, setAmount] = useState(
@@ -62,7 +50,30 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
   );
   const [moeda, setMoeda] = useState<"BRL" | "USD">(initialMoeda);
   const [dueDate, setDueDate] = useState((invoice.due_date || "").slice(0, 10));
-  const [refMonth, setRefMonth] = useState(initialRef);
+
+  // Competencias (>=1). NF antiga (sem `competencias`) cai no reference_month.
+  const initialAmount = invoice.amount != null ? Number(invoice.amount) : 0;
+  const initialCompetencias = useMemo(
+    () => competenciasToDrafts(invoice.competencias, invoice.reference_month),
+    [invoice.competencias, invoice.reference_month]
+  );
+  // Assinatura pra detectar mudanca real de competencia. Com 1 linha o valor e
+  // derivado do total da NF, entao so o mes conta — assim editar so o valor de
+  // uma NF de 1 competencia continua mandando exatamente o PATCH de antes.
+  const competenciaSignature = (drafts: CompetenciaDraft[], total: number) =>
+    drafts.length <= 1
+      ? JSON.stringify(drafts.map((d) => d.competencia))
+      : JSON.stringify(competenciasToPayload(drafts, total));
+  const initialCompetenciaSignature = useMemo(
+    () => competenciaSignature(initialCompetencias, initialAmount),
+    [initialCompetencias, initialAmount]
+  );
+  const [competencias, setCompetencias] = useState<CompetenciaDraft[]>(
+    () => initialCompetencias
+  );
+  // NF que declara mais de uma competencia: mudar o valor exige re-declarar a
+  // distribuicao (o backend 400 se vier `amount` sem `competencias`).
+  const isMultiCompetencia = (invoice.competencias?.length ?? 0) > 1;
 
   // NF a Pagar sempre aponta pra um fornecedor cadastrado (supplier_id).
   const [supplierId, setSupplierId] = useState(invoice.supplier_id || "");
@@ -129,9 +140,18 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
     if (dueDate && dueDate !== (invoice.due_date || "").slice(0, 10)) {
       out.due_date = dueDate;
     }
-    if (refMonth && refMonth !== initialRef) {
-      // backend aceita date (primeiro dia do mes)
-      out.reference_month = `${refMonth}-01`;
+    // Competencias — REPLACE do conjunto. Vai no PATCH quando muda, e TAMBEM
+    // quando so o valor mudou numa NF multi-competencia (senao o backend 400).
+    const parsedAmount = !isNaN(parsed) ? parsed : initialAmount;
+    const competenciaChanged =
+      competenciaSignature(competencias, parsedAmount) !== initialCompetenciaSignature;
+    if (competenciaChanged || (isMultiCompetencia && out.amount != null)) {
+      out.competencias = competenciasToPayload(competencias, parsedAmount);
+    }
+    // Ancora de compat (menor competencia) acompanha a lista.
+    const anchor = anchorCompetencia(competencias);
+    if (anchor && anchor !== (invoice.reference_month || "").slice(0, 7)) {
+      out.reference_month = `${anchor}-01`;
     }
     // Fornecedor — envia so quando muda.
     if (supplierId && supplierId !== invoice.supplier_id) {
@@ -152,15 +172,17 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
     amount,
     moeda,
     dueDate,
-    refMonth,
+    competencias,
     supplierId,
     tagId,
     campanhaLinks,
     initialTagId,
     initialCampanhaPayload,
+    initialCompetenciaSignature,
+    initialAmount,
+    isMultiCompetencia,
     invoice,
-    initialMoeda,
-    initialRef
+    initialMoeda
   ]);
 
   const hasChanges = Object.keys(diff).length > 0;
@@ -172,7 +194,8 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
       return "Valor deve ser maior que zero";
     if (!dueDate || dueDate.length !== MAX_BR_DATE_LEN)
       return "Vencimento obrigatorio";
-    if (!refMonth) return "Mes de referencia obrigatorio";
+    const compErr = validateCompetencias(competencias, parsed, "pt", moeda);
+    if (compErr) return compErr;
     if (!supplierId) return "Fornecedor obrigatorio";
     return null;
   };
@@ -196,7 +219,10 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
       });
       onSaved(updated);
     } catch (err: any) {
-      setError(err?.message || "Falha ao atualizar");
+      // PATCH pode voltar erro estruturado (duplicidade / soma das competencias
+      // != valor). O contrato NAO tem `confirm_duplicate` no PATCH, entao aqui
+      // so mostramos mensagem legivel — sem botao de forcar.
+      setError(readableError(err, "Falha ao atualizar"));
     } finally {
       setSaving(false);
     }
@@ -310,27 +336,14 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
               </div>
             </div>
 
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                Mes de competencia da NF <span className="text-primary">*</span>
-              </label>
-              <select
-                value={refMonth}
-                onChange={(e) => setRefMonth(e.target.value)}
-                className={inputCls}
-              >
-                <option value="">Selecione</option>
-                {buildRefMonthOptions().map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1.5 text-xs text-muted">
-                Nao limita as campanhas — voce pode vincular campanhas de meses
-                diferentes abaixo.
-              </p>
-            </div>
+            <CompetenciaFields
+              drafts={competencias}
+              onChange={setCompetencias}
+              totalNf={parseFloat((amount || "").replace(",", ".")) || 0}
+              moeda={moeda}
+              lang="pt"
+              inputCls={inputCls}
+            />
 
             <NfTagCampanhaFields
               tagId={tagId}
@@ -346,6 +359,15 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
               supplierId={supplierId}
               moeda={moeda}
               campanhas={campanhaLinks}
+            />
+
+            <DuplicidadePanel
+              supplierId={supplierId}
+              invoiceNumber={invoiceNumber}
+              amount={parseFloat((amount || "").replace(",", ".")) || 0}
+              competencias={competencias.map((c) => c.competencia)}
+              moeda={moeda}
+              excludeInvoiceId={invoice.id}
             />
 
             {error && (

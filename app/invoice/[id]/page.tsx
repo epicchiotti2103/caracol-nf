@@ -22,6 +22,13 @@ import { useAuth } from "@/lib/auth-context";
 import { useNfRole, useCan, langForRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
+import {
+  apiFetchStrict,
+  duplicateDetail,
+  readableError,
+  type DuplicateDetail
+} from "@/lib/api-error";
+import { DuplicateConfirmModal } from "@/components/nf/duplicate-confirm-modal";
 import { fmtCurrency, fmtDate, fmtDateTime, fmtRefMonth } from "@/lib/i18n";
 import { CONTAS_POR_MOEDA, CONTA_DEFAULT } from "@/lib/contas";
 import type { Invoice, NfCampanhaLink, NfUser, Supplier } from "@/types";
@@ -80,6 +87,8 @@ function InvoiceDetail({ id }: { id: string }) {
   const [payData, setPayData] = useState(todayISO());
   // De qual conta saiu o dinheiro (por moeda). Default setado ao abrir o modal.
   const [payConta, setPayConta] = useState<string>(CONTA_DEFAULT.BRL);
+  // 409 `duplicate_payment_warning`: NF ja paga cobrindo a mesma competencia.
+  const [payDupDetail, setPayDupDetail] = useState<DuplicateDetail | null>(null);
 
   // Ao abrir o modal de pagamento, reseta a conta pro default da moeda da NF
   // (invoice carrega async, entao nao da pra resolver no useState inicial).
@@ -438,8 +447,88 @@ function InvoiceDetail({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingAction, adminCompletingFlow]);
 
+  // Estado pos-acao compartilhado por aprovar/recusar/pagar.
+  const applyUpdated = (updated: Invoice, successMsg: string) => {
+    setInvoice(updated);
+    setNotesSupplier(updated.notes_supplier || "");
+    setNotesInternal(updated.notes_internal || "");
+    toast.success(successMsg);
+    setPendingAction(null);
+    setPayDupDetail(null);
+    setRejectNotes("");
+    setRejectInternalNotes("");
+    setPaidByAssigneeId("");
+    setProofFile(null);
+    setProofError("");
+    setPayFee(DEFAULT_FEE);
+    setPayData(todayISO());
+    setPayConta(CONTA_DEFAULT[updated?.moeda === "USD" ? "USD" : "BRL"]);
+    setEventsRefreshKey((k) => k + 1);
+    // Ressincroniza pra pegar campos derivados possivelmente ausentes na resposta direta
+    refreshInvoice();
+  };
+
+  // FormData do pagamento montada do zero a cada tentativa — nunca reaproveita
+  // a anterior (senao o reenvio duplicaria `confirm_duplicate`).
+  const buildPayFormData = (confirmDuplicate: boolean): FormData => {
+    const fd = new FormData();
+    // So vai no payload quando existe — sem anexo o backend grava
+    // paid_proof_path null (e o botao "Baixar comprovante" nao aparece).
+    if (proofFile) fd.append("proof", proofFile);
+    // Manda o valor normalizado ("40,00" -> "40"); backend defaulta 0.
+    fd.append("fee", String(parseFee(payFee)));
+    fd.append("data", payData);
+    // De qual conta saiu o dinheiro (backend antigo ignora; novo grava)
+    fd.append("conta", payConta);
+    if (confirmDuplicate) fd.append("confirm_duplicate", "true");
+    return fd;
+  };
+
+  const doPay = async (confirmDuplicate: boolean) => {
+    // Comprovante e OPCIONAL — so valida formato/tamanho se o admin anexou algo.
+    if (proofFile) {
+      if (!PROOF_MIMES.has(proofFile.type)) {
+        setProofError(t.proofWrongType);
+        return;
+      }
+      if (proofFile.size > PROOF_MAX_MB * 1024 * 1024) {
+        setProofError(t.proofTooBig);
+        return;
+      }
+    }
+    if (parseFee(payFee) < 0) {
+      setProofError(t.feeInvalid);
+      return;
+    }
+    setActing(true);
+    try {
+      const updated: Invoice = await apiFetchStrict(`/nf/invoices/${id}/pay`, {
+        method: "POST",
+        body: buildPayFormData(confirmDuplicate)
+      });
+      applyUpdated(updated, t.paidOk);
+    } catch (err: any) {
+      const dup = duplicateDetail(err);
+      if (dup) {
+        // 409 de possivel pagamento duplicado: confirma no modal (irreversivel).
+        setPayDupDetail(dup);
+        setProofError("");
+        return;
+      }
+      const readable = readableError(err, t.payFailed);
+      setProofError(readable);
+      toast.error(readable);
+    } finally {
+      setActing(false);
+    }
+  };
+
   const executeAction = async () => {
     if (!invoice || !pendingAction) return;
+    if (pendingAction === "pay") {
+      await doPay(false);
+      return;
+    }
     setActing(true);
     try {
       let updated: Invoice;
@@ -459,40 +548,6 @@ function InvoiceDetail({ id }: { id: string }) {
           body: JSON.stringify(body)
         });
         successMsg = t.approvedOk;
-      } else if (pendingAction === "pay") {
-        // Comprovante e OPCIONAL — so valida formato/tamanho se o admin anexou algo.
-        if (proofFile) {
-          if (!PROOF_MIMES.has(proofFile.type)) {
-            setProofError(t.proofWrongType);
-            setActing(false);
-            return;
-          }
-          if (proofFile.size > PROOF_MAX_MB * 1024 * 1024) {
-            setProofError(t.proofTooBig);
-            setActing(false);
-            return;
-          }
-        }
-        const feeNum = parseFee(payFee);
-        if (feeNum < 0) {
-          setProofError(t.feeInvalid);
-          setActing(false);
-          return;
-        }
-        const fd = new FormData();
-        // So vai no payload quando existe — sem anexo o backend grava
-        // paid_proof_path null (e o botao "Baixar comprovante" nao aparece).
-        if (proofFile) fd.append("proof", proofFile);
-        // Manda o valor normalizado ("40,00" -> "40"); backend defaulta 0.
-        fd.append("fee", String(feeNum));
-        fd.append("data", payData);
-        // De qual conta saiu o dinheiro (backend antigo ignora; novo grava)
-        fd.append("conta", payConta);
-        updated = await apiFetch(`/nf/invoices/${id}/pay`, {
-          method: "POST",
-          body: fd
-        });
-        successMsg = t.paidOk;
       } else {
         // reject
         if (!rejectNotes.trim()) {
@@ -510,37 +565,12 @@ function InvoiceDetail({ id }: { id: string }) {
         });
         successMsg = t.rejectedOk;
       }
-      setInvoice(updated);
-      setNotesSupplier(updated.notes_supplier || "");
-      setNotesInternal(updated.notes_internal || "");
-      toast.success(successMsg);
-      setPendingAction(null);
-      setRejectNotes("");
-      setRejectInternalNotes("");
-      setPaidByAssigneeId("");
-      setProofFile(null);
-      setProofError("");
-      setPayFee(DEFAULT_FEE);
-      setPayData(todayISO());
-      setPayConta(CONTA_DEFAULT[updated?.moeda === "USD" ? "USD" : "BRL"]);
-      setEventsRefreshKey((k) => k + 1);
-      // Ressincroniza pra pegar campos derivados possivelmente ausentes na resposta direta
-      refreshInvoice();
+      applyUpdated(updated, successMsg);
     } catch (err: any) {
       // 422 do FastAPI devolve `detail` como array de objetos; o apiFetch faz
       // `new Error(detail)` e a mensagem vira "[object Object]". Coage pra algo
-      // legivel (acontece enquanto o backend antigo, que ainda exige o
-      // comprovante, nao foi reiniciado na VM).
-      const raw = typeof err?.message === "string" ? err.message : "";
-      const readable =
-        raw && !raw.includes("[object Object]")
-          ? raw
-          : pendingAction === "pay"
-            ? t.payFailed
-            : lang === "pt"
-              ? "Falha."
-              : "Failed.";
-      if (pendingAction === "pay") setProofError(readable);
+      // legivel.
+      const readable = readableError(err, lang === "pt" ? "Falha." : "Failed.");
       toast.error(readable);
     } finally {
       setActing(false);
@@ -666,7 +696,11 @@ function InvoiceDetail({ id }: { id: string }) {
           bold
         />
         <Row label={t.dueDate} value={fmtDate(invoice.due_date, lang)} />
-        <Row label={t.refMonth} value={fmtRefMonth(invoice.reference_month, lang)} />
+        {invoice.competencias && invoice.competencias.length > 1 ? (
+          <CompetenciasRow label={t.refMonth} invoice={invoice} lang={lang} />
+        ) : (
+          <Row label={t.refMonth} value={fmtRefMonth(invoice.reference_month, lang)} />
+        )}
         {invoice.tag_name && <Row label="Tag" value={invoice.tag_name} />}
         {role !== "publisher" && (
           <Row
@@ -854,6 +888,7 @@ function InvoiceDetail({ id }: { id: string }) {
           loading={acting}
           onCancel={() => {
             setPendingAction(null);
+            setPayDupDetail(null);
             setRejectNotes("");
             setRejectInternalNotes("");
             setPaidByAssigneeId("");
@@ -864,6 +899,16 @@ function InvoiceDetail({ id }: { id: string }) {
             setPayConta(CONTA_DEFAULT[invoice.moeda === "USD" ? "USD" : "BRL"]);
           }}
           onConfirm={executeAction}
+        />
+      )}
+
+      {payDupDetail && (
+        <DuplicateConfirmModal
+          detail={payDupDetail}
+          moeda={invoice.moeda === "USD" ? "USD" : "BRL"}
+          loading={acting}
+          onCancel={() => setPayDupDetail(null)}
+          onConfirm={() => doPay(true)}
         />
       )}
 
@@ -1365,6 +1410,40 @@ function CampanhasBlock({
             </span>
           )}
         </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Linha de competencias quando a NF cobre 2+ meses: cada mes com o seu valor.
+ * (Com 1 competencia a tela usa o `Row` simples de sempre.)
+ */
+function CompetenciasRow({
+  label,
+  invoice,
+  lang
+}: {
+  label: string;
+  invoice: Invoice;
+  lang: "pt" | "en";
+}) {
+  const moeda = (invoice.moeda || "BRL") as "BRL" | "USD";
+  const sorted = [...(invoice.competencias || [])].sort((a, b) =>
+    String(a.competencia || "").localeCompare(String(b.competencia || ""))
+  );
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <p className="text-xs uppercase tracking-wider text-muted">{label}</p>
+      <div className="text-right">
+        {sorted.map((c, i) => (
+          <p key={`${c.competencia}-${i}`} className="text-sm text-foreground">
+            {fmtRefMonth(c.competencia, lang)}
+            <span className="ml-2 font-mono text-xs text-muted">
+              {fmtCurrency(Number(c.valor) || 0, moeda, lang)}
+            </span>
+          </p>
+        ))}
       </div>
     </div>
   );

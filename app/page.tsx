@@ -930,6 +930,46 @@ function columnsFor(role: string): Column[] {
   ];
 }
 
+/**
+ * Celula "Mes Ref". Com 1 competencia (ou backend antigo, sem o campo) fica
+ * identica ao que era: so o `reference_month` formatado. Com 2+ competencias
+ * mostra a ancora + "+N", e o title lista todas com valor.
+ */
+function RefMonthCell({
+  invoice,
+  lang
+}: {
+  invoice: Invoice;
+  lang: "pt" | "en";
+}) {
+  const comps = invoice.competencias;
+  if (!comps || comps.length <= 1) {
+    return <>{fmtRefMonth(invoice.reference_month, lang)}</>;
+  }
+  const sorted = [...comps].sort((a, b) =>
+    String(a.competencia || "").localeCompare(String(b.competencia || ""))
+  );
+  const moeda = (invoice.moeda || "BRL") as "BRL" | "USD";
+  const title = sorted
+    .map(
+      (c) =>
+        `${fmtRefMonth(c.competencia, lang)} ${fmtCurrency(
+          Number(c.valor) || 0,
+          moeda,
+          lang
+        )}`
+    )
+    .join(" · ");
+  return (
+    <span title={title} className="inline-flex items-center gap-1.5">
+      {fmtRefMonth(sorted[0]?.competencia || invoice.reference_month, lang)}
+      <span className="rounded-full border border-border bg-background px-1.5 py-0.5 text-[10px] font-medium text-muted">
+        +{sorted.length - 1}
+      </span>
+    </span>
+  );
+}
+
 function InvoiceRow({
   invoice,
   role,
@@ -990,7 +1030,7 @@ function InvoiceRow({
         </div>
       </td>
       <td className="whitespace-nowrap px-5 py-4 text-muted">
-        {fmtRefMonth(invoice.reference_month, lang)}
+        <RefMonthCell invoice={invoice} lang={lang} />
       </td>
       <td className="whitespace-nowrap px-5 py-4">
         <StatusBadge status={invoice.status} lang={lang} />

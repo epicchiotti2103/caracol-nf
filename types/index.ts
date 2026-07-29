@@ -29,6 +29,16 @@ export interface CampanhaSearchItem {
   mes_referencia?: string | null;
 }
 
+// ── Competencias da NF a pagar (1..N por NF) ────────────────────────────────
+// Uma NF pode cobrir varios meses de competencia, cada um com o seu valor
+// (soma == valor da NF). Backend: `competencias_json` no POST, `competencias`
+// no PATCH, e `competencias` (YYYY-MM-01) nos GETs de lista/detalhe.
+// Opcional — backend em deploy paralelo (graceful degradation).
+export interface NfCompetencia {
+  competencia: string;      // "YYYY-MM-01" no GET; enviamos "YYYY-MM"
+  valor: number | string;   // backend serializa Decimal como string
+}
+
 // Status do workflow de invoice
 // em_analise (precisa 2 aprovacoes: adm_campanha + admin) -> aprovada -> paga
 // em_analise -> recusada (com motivo)
@@ -103,6 +113,40 @@ export interface Invoice {
   tag_id?: string | null;
   tag_name?: string | null;
   campanhas?: NfCampanhaLink[];
+  // Competencias declaradas (>=1). Quando ausente/vazio, a NF cobre so o
+  // `reference_month` (comportamento historico).
+  competencias?: NfCompetencia[];
+}
+
+// ── Anti-duplicidade da NF a pagar ──────────────────────────────────────────
+// GET /nf/invoices/duplicate-check (so leitura, nunca bloqueia) e os payloads
+// dos 409 estruturados do POST /nf/invoices e dos endpoints de pagamento.
+
+// Sobreposicao de competencia com uma NF ja cadastrada do mesmo fornecedor.
+export interface DuplicateOverlap {
+  invoice_id: string;
+  invoice_number?: string | null;
+  competencia?: string | null;      // YYYY-MM-01
+  valor?: number | string | null;   // valor daquela competencia
+  amount?: number | string | null;  // valor total da NF existente
+  status?: string | null;
+}
+
+// Conflito de numero de NF / de PDF identico. O contrato do backend nao fecha
+// o shape desses dois ("{...}") — lemos defensivo por invoice_number/invoice_id.
+export interface DuplicateConflictRef {
+  invoice_id?: string | null;
+  invoice_number?: string | null;
+  status?: string | null;
+  amount?: number | string | null;
+  competencia?: string | null;
+  [k: string]: any;
+}
+
+export interface DuplicateCheckResponse {
+  number_conflict: DuplicateConflictRef | null;
+  pdf_conflict: DuplicateConflictRef | null;
+  overlaps: DuplicateOverlap[];
 }
 
 // ── RBAC dinâmico (permissões por papel) ───────────────────────────────────

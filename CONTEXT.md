@@ -59,16 +59,20 @@ caracol-nf/
     nf/dashboard-chips.tsx       Chips do topo do dashboard (pendentes/a pagar/vencidas) + hovercard
     nf/hover-popover.tsx         Primitivo de hover/click popover (substitui Radix HoverCard)
     nf/invoice-events.tsx        Timeline de eventos do detalhe
+    nf/competencia-fields.tsx    Lista editavel de competencias (multi-mes) da NF a pagar
+    nf/duplicidade-panel.tsx     Painel informativo anti-duplicidade (numero/PDF/competencia)
+    nf/duplicate-confirm-modal.tsx  Modais dos 409 de duplicidade (bloqueio vs "fazer mesmo assim")
     status-badge.tsx             Badge bilingual de status
   lib/
     api.ts                       fetch helper com Bearer token
+    api-error.ts                 fetch que preserva `detail` estruturado (409 de duplicidade) — local do NF
     auth-context.tsx             Sessao + SSO (replicado nos 3 apps)
     config.ts                    API_BASE_URL, HUB_URL
     toast-context.tsx            Toasts globais
     nf-role-context.tsx          Papel intra-NF + permissoes (useCan) + langForRole
     nf-role-cache.ts             Cache em memoria (papel + contador + permissoes)
     i18n.ts                      Strings bilingual + formatadores
-  types/index.ts                 Invoice (com assignee), InvoiceStatus, NfRole, NfUser, DashboardSummary, MeRoleResponse, MePermsResponse, PermsMatrixResponse, NfPermKey
+  types/index.ts                 Invoice (com assignee + competencias), NfCompetencia, DuplicateCheckResponse/Overlap, InvoiceStatus, NfRole, NfUser, DashboardSummary, MeRoleResponse, MePermsResponse, PermsMatrixResponse, NfPermKey
   middleware.ts                  Redireciona pra /login se nao autenticado
 ```
 
@@ -101,6 +105,12 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `GET /nf/fechamento-sugestoes?supplier_id=<uuid>` — sugestoes de vinculo pra NF **a pagar**, derivadas do fechamento. Retorna `{items: [{mes_referencia, campanha_id, campanha_name, codigo?, valor_sugerido, moeda}]}` com as campanhas onde o fornecedor tem pagamento a receber e que ainda **nao tem NF a pagar vinculada**; `valor_sugerido` e o bruto do fechamento. Consumido pelo `NfTagCampanhaFields` quando ha `supplierId` (so NF a pagar admin/adm_campanha) — agrupa por mes, checkbox + valor editavel, nao auto-marca. `codigo` lido defensivo (fallback `campanha_name`). Graceful: 404/erro suprime o bloco de sugestoes.
 - **Campo legado removido do front**: o `campaign_name` (texto livre "Campanha") nao e mais lido nem enviado pelo frontend (forms criar/editar, detalhe da NF, listas, batch-pay). Substituido pelo bloco estruturado de campanhas vinculadas. A coluna segue no backend como **deprecated** so pra NFs historicas (o evento de historico `campaign_name` em `invoice-events.tsx` ainda e renderizado pra edicoes antigas).
 - `POST /nf/conciliacao` — conciliacao da NF **a pagar** contra o fechamento de campanha. Body `{supplier_id, moeda, campanhas: [{campanha_id, valor}]}`. Retorna `{publisher_name, total_informado, total_esperado, diff_total, status_geral: "ok"|"divergente"|"incompleto", por_campanha: [{campanha_id, codigo, name, mes_referencia, valor_informado, valor_esperado, moeda_fechamento, status: "ok"|"divergente"|"sem_fechamento"|"publisher_nao_encontrado", diff}]}`. Consumido pelo `ConciliacaoPanel` (`components/nf/conciliacao-panel.tsx`) nos forms de criar (`/invoice/new`) e editar NF a pagar (`invoice-edit-modal.tsx`) — so admin/adm_campanha, debounce 500ms, dispara quando ha fornecedor + ao menos 1 campanha com valor > 0. Painel **informativo** (nunca bloqueia submit); degrada silenciosamente (some) se o endpoint falhar/404.
+- **Competencias multi-mes (NF a pagar)**: `POST /nf/invoices` aceita `competencias_json` (Form, string JSON `[{"competencia":"2026-05","valor":"3000.00"}]`) — ausente, o backend usa `reference_month` + `amount`. Backend valida Σ valor == amount (tolerancia 0,01) e devolve **400** se nao bater. `PATCH /nf/invoices/{id}` aceita `competencias` (mesma shape, REPLACE do conjunto); mudar `amount` numa NF multi-competencia **sem** re-declarar da 400 — por isso o modal de edicao forca `competencias` no diff quando o valor muda numa NF de 2+ meses. Os GETs (lista e detalhe) trazem `competencias: [{competencia:"YYYY-MM-01", valor}]`. O filtro `reference_month=YYYY-MM` da listagem passa a casar por competencia declarada (sem mudanca no front). Frontend envia `YYYY-MM` e le `YYYY-MM-01` — a assimetria e do contrato, os formatadores toleram os dois. Consumido por `components/nf/competencia-fields.tsx` (form de criar + modal de editar).
+- `GET /nf/invoices/duplicate-check?supplier_id=&invoice_number=&amount=&competencias=2026-05,2026-06&exclude_invoice_id=` — so leitura, nunca bloqueia. Retorna `{number_conflict:{...}|null, pdf_conflict:{...}|null, overlaps:[{invoice_id, invoice_number, competencia, valor, amount, status}]}`. O shape de `number_conflict`/`pdf_conflict` nao esta fechado no contrato — o front le defensivo (`invoice_number` / `invoice_id`). Consumido pelo `DuplicidadePanel` (`components/nf/duplicidade-panel.tsx`), mesma mecanica do `ConciliacaoPanel` (admin/adm_campanha, debounce 500ms, `unavailable` some com o painel em erro/404).
+- **409 estruturados de duplicidade** — `detail` e um **objeto** (o `apiFetch` de `lib/api.ts` viraria `[object Object]`, entao esses fluxos usam `lib/api-error.ts`: `apiFetchStrict` preserva `status`/`detail`, `duplicateDetail()` so reconhece os 3 codigos abaixo e `readableError()` garante que nada vira "[object Object]"):
+  - `POST /nf/invoices` → **409** `{"detail":{"code":"duplicate_number","invoice_id","invoice_number"}}` = numero ja existe pro fornecedor. **Bloqueio duro**, sem reenvio.
+  - `POST /nf/invoices` → **409** `{"detail":{"code":"duplicate_warning","pdf_conflict":{...}|null,"overlaps":[...]}}` = PDF identico e/ou competencia sobreposta. Modal com "Cadastrar mesmo assim" reenvia com `confirm_duplicate=true` (Form bool, default false).
+  - `POST /nf/invoices/{id}/pay` e `POST /nf/payment-batches` → **409** `{"detail":{"code":"duplicate_payment_warning","overlaps":[...]}}`. Modal de passo **irreversivel**; confirma reenviando com `confirm_duplicate=true`. O FormData e remontado do zero a cada tentativa (nunca reaproveita a anterior).
 - **Tag + campanhas em invoice/receivable**: o `GET` de invoice e receivable agora carrega `tag_id`, `tag_name` e `campanhas: [{campanha_id, codigo, name, mes_referencia, valor_alocado}]`. O `POST` (multipart) aceita `tag_id` (Form) e `campanhas_json` (Form, string JSON `[{campanha_id, valor}]`). O `PATCH` (JSON) aceita `tag_id` e `campanhas: [{campanha_id, valor}]` (REPLACE total dos vinculos — frontend so envia quando o conjunto muda). Vinculos vivem em `nf_invoice_campanhas` / `nf_receivable_campanhas` no backend.
 - `GET /perms/nf/me` — `{app:"nf", role, permissions:[keys]}` — permissoes do papel do user logado. Consumido pelo `BootstrapGate` no bootstrap; alimenta `useCan()`. Se falhar, gate usa fallback derivado do role (graceful degradation).
 - `GET /perms/nf/matrix` — (admin) `{roles:[...], catalog:[{key,label,group}], matrix:{role:{key:bool}}}`. Consumido por `/admin/papeis`.
@@ -234,6 +244,8 @@ NEXT_PUBLIC_HUB_URL=https://app.aeobr.com.br
 - [x] Gestao de papeis intra-NF (`/admin/usuarios-nf`)
 - [x] Logo Caracol clicavel volta pro Hub
 - [x] Campanhas como entidade propria: NF vincula campanhas via bloco estruturado (busca por mes + texto, valor por campanha). Campo texto livre `campaign_name` removido do front (deprecated no backend)
+- [x] **Competencia multi-mes na NF a pagar** (`competencias_json` no POST, `competencias` no PATCH/GET): lista editavel de `[mes, valor]` com total alocado vs valor da NF; 1 competencia = UX de antes (valor derivado do total). Lista e detalhe mostram `+N` / mes a mes
+- [x] **Anti-duplicidade**: painel informativo (`GET /nf/invoices/duplicate-check`) + modais dos 409 (`duplicate_number` bloqueia; `duplicate_warning` e `duplicate_payment_warning` liberam com `confirm_duplicate=true`, com aviso explicito de que o pagamento e irreversivel)
 - [ ] Integracao com SEFAZ (futuro)
 - [ ] Notificacoes (futuro)
 

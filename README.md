@@ -27,6 +27,24 @@ CRUD de invoices funcionando, com upload de PDF, papeis intra-NF (publisher / ad
 - `/admin/papeis` — matriz papel×permissao (grade com linhas agrupadas por `group` do catalogo, colunas = papeis). Toggles editaveis por papel; coluna **Admin** e read-only (god-mode, tudo liberado). Carrega `GET /perms/nf/matrix`, salva via `PUT /perms/nf/matrix`. Gate `nf.usuarios.manage`.
 - `/admin/tags` — catalogo de **tags de NF** (1 tag por nota). **Admin-only** (gate estatico `role === "admin"` — escrita e admin-only no backend; sem perm key dedicada). Lista todas as tags, cria (input + botao) e ativa/desativa (`PATCH /nf/tags/{id}/toggle-active`). Tags inativas nao aparecem no seletor dos forms. CRUD via `GET /nf/tags`, `POST /nf/tags`, `PATCH /nf/tags/{id}`, `PATCH /nf/tags/{id}/toggle-active`.
 
+### Competencia multi-mes na NF a pagar (+ anti-duplicidade)
+
+Uma NF a pagar pode cobrir **varios meses de competencia**. No form de criar (`/invoice/new`) e no modal de editar, o antigo dropdown unico "Mes de competencia da NF" virou uma **lista editavel** (`components/nf/competencia-fields.tsx`):
+
+- **1 competencia (caso comum) = mesma UX de antes**: so o dropdown do mes, sem campo de valor. O valor da linha unica e **derivado** do valor da NF (o usuario nao digita nada a mais).
+- **"+ adicionar mes"** cria a 2a linha; ai cada linha ganha o seu valor e aparece em tempo real o **alocado vs valor da NF + diferenca**. Submit fica bloqueado enquanto a soma nao fecha ("Faltam R$ 500,00 pra fechar o valor da nota").
+- No submit vai `competencias_json` (`[{competencia:"YYYY-MM", valor:"3000.00"}]`) + `reference_month` = **menor competencia** (ancora de compat). No PATCH vai `competencias` (REPLACE do conjunto).
+- Exibicao: a lista (`/`) mostra `mai. de 2026 +1` na coluna "Mes Ref" (title com todas as competencias e valores); o detalhe lista mes a mes com valor. Com 1 competencia (ou backend antigo, sem o campo) fica identico ao que era.
+
+**Anti-duplicidade** (o risco real: pagar o mesmo mes duas vezes):
+
+- **Painel informativo** (`components/nf/duplicidade-panel.tsx`, so admin/adm_campanha, ao lado do de conciliacao): consulta `GET /nf/invoices/duplicate-check` com debounce de 500ms assim que ha fornecedor + numero da nota ou competencia. Avisa de **numero de NF repetido** (vermelho — vai bloquear o cadastro), **PDF identico** (ambar) e **competencia ja coberta** por outra NF do fornecedor (ambar). Nunca bloqueia o submit; some se o endpoint falhar/404.
+- **Modais de confirmacao** (`components/nf/duplicate-confirm-modal.tsx`), a partir dos 409 estruturados do backend:
+  - `duplicate_number` → **bloqueio duro**, sem botao de forcar: corrija o numero da nota.
+  - `duplicate_warning` (cadastro) → lista os conflitos + **"Cadastrar mesmo assim"** (reenvia com `confirm_duplicate=true`).
+  - `duplicate_payment_warning` (pagamento individual e em lote) → lista as NFs pagas que sobrepoem a competencia e avisa que **marcar como paga e irreversivel**; "Pagar mesmo assim" reenvia com `confirm_duplicate=true`.
+- O `detail` desses 409 e um objeto — o `apiFetch` compartilhado transformaria em `[object Object]`, entao esses fluxos usam `lib/api-error.ts` (`apiFetchStrict` + `duplicateDetail` + `readableError`), **local do NF**, sem tocar no `lib/api.ts` replicado. So os 3 codigos conhecidos ganham modal; qualquer outro erro cai em mensagem legivel.
+
 ### Tag + campanhas nos forms de NF
 
 Os forms de criar/editar NF (a pagar: `/invoice/new` + modal de edicao em `/invoice/[id]`; a receber: modal `receivable-edit-modal.tsx`) tem um bloco compartilhado (`components/nf/nf-tag-campanha-fields.tsx`) com:

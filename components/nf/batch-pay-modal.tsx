@@ -3,6 +3,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { X, Loader2, Upload, AlertCircle } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import {
+  apiFetchStrict,
+  duplicateDetail,
+  readableError,
+  type DuplicateDetail
+} from "@/lib/api-error";
+import { DuplicateConfirmModal } from "@/components/nf/duplicate-confirm-modal";
 import { useToast } from "@/lib/toast-context";
 import { fmtCurrency } from "@/lib/i18n";
 import { CONTAS_POR_MOEDA, CONTA_DEFAULT } from "@/lib/contas";
@@ -39,6 +46,8 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
   // texto nativo), e remontar ao SELECIONAR apagaria o nome da tela.
   const [fileInputKey, setFileInputKey] = useState(0);
   const [saving, setSaving] = useState(false);
+  // 409 `duplicate_payment_warning` do lote (competencia ja paga).
+  const [dupDetail, setDupDetail] = useState<DuplicateDetail | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -85,6 +94,51 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
     setSelected(allSelected ? new Set() : new Set(doMoeda.map((i) => i.id)));
   };
 
+  // FormData montada do zero a cada tentativa (evita duplicar
+  // `confirm_duplicate` num reenvio).
+  const buildFormData = (confirmDuplicate: boolean): FormData => {
+    const fd = new FormData();
+    fd.append("invoice_ids", selectedInvoices.map((i) => i.id).join(","));
+    fd.append("fee", String(feeNum));
+    fd.append("data", data);
+    // De qual conta saiu o dinheiro (backend antigo ignora; novo grava)
+    fd.append("conta", conta);
+    // Um comprovante para TODAS as NFs do lote. Sendo opcional, ou todas
+    // recebem o mesmo path ou nenhuma recebe — nunca um subconjunto.
+    if (file) fd.append("proof", file);
+    if (confirmDuplicate) fd.append("confirm_duplicate", "true");
+    return fd;
+  };
+
+  const doPay = async (confirmDuplicate: boolean) => {
+    setSaving(true);
+    setError("");
+    try {
+      await apiFetchStrict("/nf/payment-batches", {
+        method: "POST",
+        body: buildFormData(confirmDuplicate)
+      });
+      toast.success(`${selectedInvoices.length} NF(s) paga(s) em lote.`);
+      setDupDetail(null);
+      onPaid();
+      onClose();
+    } catch (err: any) {
+      const dup = duplicateDetail(err);
+      if (dup) {
+        // 409: alguma NF do lote sobrepoe competencia ja paga. Confirma no modal.
+        setDupDetail(dup);
+        return;
+      }
+      // 422 do FastAPI devolve `detail` como array de objetos — coage pra algo
+      // legivel (backend antigo, ainda sem restart, exige o comprovante).
+      setError(
+        readableError(err, "Falha ao pagar em lote. Tente novamente ou anexe o comprovante.")
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const submit = async () => {
     if (selectedInvoices.length === 0) return setError("Selecione ao menos uma NF.");
     // Comprovante e OPCIONAL — so valida formato/tamanho se anexaram algo.
@@ -93,36 +147,7 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
     if (file && file.size > PROOF_MAX_MB * 1024 * 1024)
       return setError("Comprovante excede 10MB.");
     if (feeNum < 0) return setError("Taxa inválida.");
-
-    setSaving(true);
-    setError("");
-    try {
-      const fd = new FormData();
-      fd.append("invoice_ids", selectedInvoices.map((i) => i.id).join(","));
-      fd.append("fee", String(feeNum));
-      fd.append("data", data);
-      // De qual conta saiu o dinheiro (backend antigo ignora; novo grava)
-      fd.append("conta", conta);
-      // Um comprovante para TODAS as NFs do lote. Sendo opcional, ou todas
-      // recebem o mesmo path ou nenhuma recebe — nunca um subconjunto.
-      if (file) fd.append("proof", file);
-      await apiFetch("/nf/payment-batches", { method: "POST", body: fd });
-      toast.success(`${selectedInvoices.length} NF(s) paga(s) em lote.`);
-      onPaid();
-      onClose();
-    } catch (err: any) {
-      // 422 do FastAPI devolve `detail` como array de objetos; o apiFetch faz
-      // `new Error(detail)` e a mensagem vira "[object Object]". Coage pra algo
-      // legivel (backend antigo, ainda sem restart, exige o comprovante).
-      const raw = typeof err?.message === "string" ? err.message : "";
-      setError(
-        raw && !raw.includes("[object Object]")
-          ? raw
-          : "Falha ao pagar em lote. Tente novamente ou anexe o comprovante."
-      );
-    } finally {
-      setSaving(false);
-    }
+    await doPay(false);
   };
 
   return (
@@ -309,6 +334,16 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
           </div>
         </div>
       </div>
+
+      {dupDetail && (
+        <DuplicateConfirmModal
+          detail={dupDetail}
+          moeda={moeda}
+          loading={saving}
+          onCancel={() => setDupDetail(null)}
+          onConfirm={() => doPay(true)}
+        />
+      )}
     </div>
   );
 }
