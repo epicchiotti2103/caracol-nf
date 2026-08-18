@@ -17,8 +17,9 @@ interface Props {
 /**
  * Modal de marcar NF a Receber como recebida.
  *
- * Backend: POST /api/v1/nf/receivables/{id}/receive (multipart, campo `proof`
- * PNG/JPEG/PDF max 10MB **opcional**). So funciona em status=pendente.
+ * Backend: POST /api/v1/nf/receivables/{id}/receive (campo `proof` PNG/JPEG/PDF
+ * max 10MB **opcional** — com anexo vai multipart, sem anexo vai SEM body).
+ * So funciona em status=pendente.
  * Simetrico ao lado a pagar, onde o comprovante tambem e opcional (o PDF da
  * nota, esse sim, continua obrigatorio no cadastro).
  */
@@ -49,11 +50,21 @@ export function ReceivableReceiveModal({ receivable, onClose, onSaved }: Props) 
     }
     setSaving(true);
     try {
-      const fd = new FormData();
-      if (proof) fd.append("proof", proof);
+      // Sem anexo NAO monta FormData: um multipart de zero partes (o que o
+      // browser serializa pra `new FormData()` vazio) explode no parser do
+      // backend com 400 "There was an error parsing the body" — o erro
+      // acontece antes do handler, entao o `proof` opcional nao ajuda.
+      // Sem body, o apiFetch manda Content-Type json vazio e o Starlette
+      // devolve form vazio -> `proof` chega None. Com anexo, multipart normal.
+      const opts: RequestInit = { method: "POST" };
+      if (proof) {
+        const fd = new FormData();
+        fd.append("proof", proof);
+        opts.body = fd;
+      }
       const saved: NfReceivable = await apiFetch(
         `/nf/receivables/${receivable.id}/receive`,
-        { method: "POST", body: fd }
+        opts
       );
       onSaved(saved);
     } catch (err: any) {
