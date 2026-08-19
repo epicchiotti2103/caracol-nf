@@ -51,7 +51,10 @@ export function describeOverlap(
   if (valor != null) extras.push(fmtCurrency(valor, moeda, "pt"));
   if (o.status) extras.push(`status ${o.status}`);
   const suffix = extras.length > 0 ? ` (${extras.join(", ")})` : "";
-  return `NF #${num}${mes ? ` cobrindo ${mes}` : ""}${suffix}`;
+  // `no_lote` so vem no 409 de pagamento: o conflito e com outra NF do PROPRIO
+  // lote, nao com uma nota ja paga.
+  const origem = o.no_lote ? " · deste lote" : "";
+  return `NF #${num}${mes ? ` cobrindo ${mes}` : ""}${suffix}${origem}`;
 }
 
 /** Lista reaproveitada pelo painel e pelos modais de confirmacao. */

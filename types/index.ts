@@ -130,6 +130,10 @@ export interface DuplicateOverlap {
   valor?: number | string | null;   // valor daquela competencia
   amount?: number | string | null;  // valor total da NF existente
   status?: string | null;
+  // true = o conflito e ENTRE as NFs do proprio lote de pagamento (mesmo
+  // fornecedor + mesmo mes, nenhuma paga ainda). Sem a flag, o conflito e com
+  // uma NF JA PAGA. So o 409 de pagamento manda isso.
+  no_lote?: boolean;
 }
 
 // Conflito de numero de NF / de PDF identico. O contrato do backend nao fecha

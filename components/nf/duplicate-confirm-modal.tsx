@@ -24,7 +24,11 @@ interface Props {
  *   corrigir o numero da nota.
  * - `duplicate_warning`: aviso no cadastro -> "Cadastrar mesmo assim".
  * - `duplicate_payment_warning`: aviso no PAGAMENTO -> passo irreversivel,
- *   texto explicito + "Pagar mesmo assim".
+ *   texto explicito + "Pagar mesmo assim". Aqui o overlap tem DUAS origens:
+ *   item com `no_lote: true` = conflito entre as NFs do PROPRIO lote (nenhuma
+ *   paga ainda); item sem a flag = conflito com NF JA PAGA. A copy separa os
+ *   dois — o gate e o mesmo, mas dizer "ja tem NF paga" quando nada foi pago
+ *   engana o usuario.
  */
 export function DuplicateConfirmModal({
   detail,
@@ -39,11 +43,18 @@ export function DuplicateConfirmModal({
     ? detail.overlaps
     : [];
 
+  // Overlap com NF JA PAGA vs overlap entre as NFs do proprio lote.
+  const pagas = overlaps.filter((o) => !o.no_lote);
+  const doLote = overlaps.filter((o) => o.no_lote);
+  const soLote = isPayment && doLote.length > 0 && pagas.length === 0;
+
   const title = isBlock
     ? "Numero de NF ja cadastrado"
-    : isPayment
-      ? "Atencao: possivel pagamento em duplicidade"
-      : "Atencao: possivel NF duplicada";
+    : soLote
+      ? "Atencao: NFs deste lote cobrem o mesmo mes"
+      : isPayment
+        ? "Atencao: possivel pagamento em duplicidade"
+        : "Atencao: possivel NF duplicada";
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/60 p-4 sm:items-center">
@@ -80,17 +91,32 @@ export function DuplicateConfirmModal({
             </p>
           )}
 
-          {isPayment && (
+          {isPayment && pagas.length > 0 && (
             <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2">
               <p className="text-sm font-medium text-danger">
                 Esse fornecedor ja tem NF paga cobrindo a mesma competencia.
               </p>
-              <p className="mt-1 text-xs text-danger/90">
-                Marcar como paga e um passo IRREVERSIVEL: o dinheiro ja saiu e a NF
-                nao volta pra fila. Se isso for pagamento repetido do mesmo mes, cancele
-                e confira antes.
+            </div>
+          )}
+
+          {isPayment && doLote.length > 0 && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+              <p className="text-sm font-medium text-amber-100">
+                As NFs deste lote cobrem o mesmo mes do mesmo fornecedor.
+              </p>
+              <p className="mt-1 text-xs text-amber-100/90">
+                Nenhuma esta paga ainda — confira se nao sao a mesma nota duplicada
+                antes de pagar.
               </p>
             </div>
+          )}
+
+          {isPayment && (
+            <p className="text-xs text-danger/90">
+              Marcar como paga e um passo IRREVERSIVEL: o dinheiro ja saiu e a NF nao
+              volta pra fila. Se isso for pagamento repetido do mesmo mes, cancele e
+              confira antes.
+            </p>
           )}
 
           {detail.pdf_conflict && (
@@ -104,15 +130,34 @@ export function DuplicateConfirmModal({
             </div>
           )}
 
-          {overlaps.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted">
-                {isPayment
-                  ? "NFs pagas que cobrem a mesma competencia:"
-                  : "NFs desse fornecedor que ja cobrem essa competencia:"}
-              </p>
-              <OverlapList overlaps={overlaps} moeda={moeda} />
-            </div>
+          {isPayment ? (
+            <>
+              {pagas.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted">
+                    NFs pagas que cobrem a mesma competencia:
+                  </p>
+                  <OverlapList overlaps={pagas} moeda={moeda} />
+                </div>
+              )}
+              {doLote.length > 0 && (
+                <div className="space-y-1.5">
+                  <p className="text-xs font-medium text-muted">
+                    NFs deste lote que cobrem o mesmo mes:
+                  </p>
+                  <OverlapList overlaps={doLote} moeda={moeda} />
+                </div>
+              )}
+            </>
+          ) : (
+            overlaps.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-muted">
+                  NFs desse fornecedor que ja cobrem essa competencia:
+                </p>
+                <OverlapList overlaps={overlaps} moeda={moeda} />
+              </div>
+            )
           )}
 
           {!isBlock && overlaps.length === 0 && !detail.pdf_conflict && (
