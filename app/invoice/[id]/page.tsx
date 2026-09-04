@@ -9,6 +9,7 @@ import {
   Download,
   Loader2,
   Pencil,
+  Trash2,
   User as UserIcon,
   Wallet,
   X
@@ -19,7 +20,12 @@ import { ApprovalBadge, OverdueBadge } from "@/components/nf/approval-badge";
 import { InvoiceEvents } from "@/components/nf/invoice-events";
 import { InvoiceEditModal } from "@/components/nf/invoice-edit-modal";
 import { useAuth } from "@/lib/auth-context";
-import { useNfRole, useCan, langForRole } from "@/lib/nf-role-context";
+import {
+  useNfRole,
+  useCan,
+  useCanDeleteInvoices,
+  langForRole
+} from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetch } from "@/lib/api";
 import {
@@ -29,6 +35,7 @@ import {
   type DuplicateDetail
 } from "@/lib/api-error";
 import { DuplicateConfirmModal } from "@/components/nf/duplicate-confirm-modal";
+import { DeleteInvoiceModal } from "@/components/nf/delete-invoice-modal";
 import { fmtCurrency, fmtDate, fmtDateTime, fmtRefMonth } from "@/lib/i18n";
 import { CONTAS_POR_MOEDA, CONTA_DEFAULT } from "@/lib/contas";
 import type { Invoice, NfCampanhaLink, NfUser, Supplier } from "@/types";
@@ -64,6 +71,8 @@ export default function InvoiceDetailPage({ params }: { params: { id: string } }
 function InvoiceDetail({ id }: { id: string }) {
   const role = useNfRole();
   const can = useCan();
+  // Flag do backend (GET /nf/me/role). Ausente = false -> botao nem aparece.
+  const canDeleteInvoices = useCanDeleteInvoices();
   const lang = langForRole(role);
   const router = useRouter();
   const toast = useToast();
@@ -130,6 +139,7 @@ function InvoiceDetail({ id }: { id: string }) {
 
   // Modal de edicao da NF (admin/adm_campanha em em_analise)
   const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   // Dados de pagamento do fornecedor vinculado (HelmBank) — read-only, so admin.
   // Backend pode nao ter os campos pay_* ainda; tratamos graceful.
@@ -624,6 +634,17 @@ function InvoiceDetail({ id }: { id: string }) {
           <h1 className="text-2xl font-semibold text-foreground">{invoice.invoice_number}</h1>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          {/* Apagar NF — so com `can_delete_invoices` do backend e NF nao paga */}
+          {canDeleteInvoices && invoice.status !== "paga" && (
+            <button
+              onClick={() => setDeleteOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-danger/30 bg-danger/10 px-3 py-1.5 text-xs font-medium text-danger transition-colors hover:bg-danger/20"
+              title={lang === "pt" ? "Apagar NF" : "Delete invoice"}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              {lang === "pt" ? "Apagar NF" : "Delete"}
+            </button>
+          )}
           {/* Botao Editar — so admin/adm_campanha + em_analise */}
           {(role === "admin" || role === "adm_campanha") &&
             invoice.status === "em_analise" && (
@@ -937,6 +958,19 @@ function InvoiceDetail({ id }: { id: string }) {
             setEditOpen(false);
             toast.success("NF atualizada");
             setEventsRefreshKey((k) => k + 1);
+          }}
+        />
+      )}
+
+      {deleteOpen && invoice && canDeleteInvoices && (
+        <DeleteInvoiceModal
+          invoice={invoice}
+          lang={lang}
+          onClose={() => setDeleteOpen(false)}
+          onDeleted={() => {
+            setDeleteOpen(false);
+            toast.success(lang === "pt" ? "NF apagada" : "Invoice deleted");
+            router.push("/");
           }}
         />
       )}

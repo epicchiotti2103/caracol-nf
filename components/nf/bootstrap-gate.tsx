@@ -22,7 +22,13 @@ type HubApp = {
 type GateState =
   | { status: "idle" }
   | { status: "checking" }
-  | { status: "ok"; role: NfRole; pendingAssignedCount: number; permissions: string[] }
+  | {
+      status: "ok";
+      role: NfRole;
+      pendingAssignedCount: number;
+      permissions: string[];
+      canDeleteInvoices: boolean;
+    }
   | { status: "no-app" }
   | { status: "no-role" }
   | { status: "invalid-role" }
@@ -120,7 +126,8 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
         status: "ok",
         role: cachedRole.role,
         pendingAssignedCount: cachedRole.pendingAssignedCount,
-        permissions: cachedRole.permissions ?? fallbackPermsForRole(cachedRole.role)
+        permissions: cachedRole.permissions ?? fallbackPermsForRole(cachedRole.role),
+        canDeleteInvoices: cachedRole.canDeleteInvoices === true
       });
       return;
     }
@@ -154,11 +161,15 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
         let role: NfRole | null;
         let pendingAssignedCount = 0;
         let permissions: string[] = [];
+        // Flag propria do backend (nao entra na matriz de perms). Ausente no
+        // payload = false -> acao de apagar NF nao aparece.
+        let canDeleteInvoices = false;
         const cached = getRoleCache();
         if (cached && cached.userId === user.id) {
           role = cached.role;
           pendingAssignedCount = cached.pendingAssignedCount;
           permissions = cached.permissions ?? [];
+          canDeleteInvoices = cached.canDeleteInvoices === true;
         } else {
           const res: MeRoleResponse = await apiFetch("/nf/me/role");
           role = res?.role ?? null;
@@ -167,6 +178,7 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
               ? Number(res.pending_my_approval_count)
               : Number(res?.pending_assigned_count) || 0;
           pendingAssignedCount = Math.max(0, pendingMy || 0);
+          canDeleteInvoices = res?.can_delete_invoices === true;
 
           // Step 3: permissões dinâmicas por papel. Graceful degradation:
           // se o endpoint de perms ainda não estiver no ar, cai num fallback
@@ -181,7 +193,13 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
               permissions = fallbackPermsForRole(role);
             }
           }
-          setRoleCache({ userId: user.id, role, pendingAssignedCount, permissions });
+          setRoleCache({
+            userId: user.id,
+            role,
+            pendingAssignedCount,
+            permissions,
+            canDeleteInvoices
+          });
         }
         if (cancelled) return;
 
@@ -189,7 +207,13 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
           setState({ status: "no-role" });
           return;
         }
-        setState({ status: "ok", role, pendingAssignedCount, permissions });
+        setState({
+          status: "ok",
+          role,
+          pendingAssignedCount,
+          permissions,
+          canDeleteInvoices
+        });
       } catch (err: any) {
         if (cancelled) return;
         setState({ status: "error", message: err?.message || "Falha ao validar acesso" });
@@ -298,6 +322,7 @@ export function BootstrapGate({ children }: { children: React.ReactNode }) {
       role={state.role}
       pendingAssignedCount={state.pendingAssignedCount}
       permissions={state.permissions}
+      canDeleteInvoices={state.canDeleteInvoices}
     >
       {children}
     </NfRoleProvider>

@@ -65,7 +65,7 @@ A logo Caracol no header e clicavel e volta pro Hub.
 
 ## Papeis intra-NF
 
-Sao definidos numa tabela do backend e expostos por `GET /api/v1/nf/me/role`. O `BootstrapGate` resolve o papel apos confirmar o acesso ao app `nf` e cacheia em memoria pra sessao.
+Sao definidos numa tabela do backend e expostos por `GET /api/v1/nf/me/role`. O `BootstrapGate` resolve o papel apos confirmar o acesso ao app `nf` e cacheia em memoria pra sessao. A mesma resposta carrega a flag **`can_delete_invoices`** (booleana, fora da matriz de permissoes) — ela e que libera a acao "Apagar NF"; ausente = `false`, entao com backend antigo a acao nao aparece.
 
 | Papel | Pode | Idioma da UI |
 |---|---|---|
@@ -110,6 +110,12 @@ Quando uma transferencia bancaria quita VARIAS NFs de uma vez (mesmo comprovante
 - `POST /nf/payment-batches` — multipart `invoice_ids` (csv), `fee`, `data`, `conta`, `proof` (opcional). Valida `aprovada` + mesma moeda, cria `nf_payment_batches` (migration 044) e seta em cada NF `paid_at`/`paid_proof_path`/`batch_payment_id`. **Caminho proprio (`/payment-batches`) pra evitar colisao com `/invoices/{id}/pay`.**
 - `GET /nf/payment-batches/{id}` (+ `/proof`) — o lote + as NFs que ele quitou. O detalhe da NF mostra **"Pago em lote — mesmo comprovante destas NFs"** (links pras irmas), pra rastrear sem abrir uma a uma.
 - A **taxa** do lote entra como saida de caixa no app **Gerencial** (projecao + conciliacao), pela `data` da transferencia.
+
+### Apagar NF (soft delete)
+
+Quem tem `can_delete_invoices: true` no `GET /nf/me/role` ve a acao **"Apagar NF"** na lista "A pagar" (icone de lixeira na coluna de acoes) e no detalhe da NF. Abre um modal de confirmacao com numero + fornecedor + valor e um campo **motivo (opcional)**, e chama `DELETE /nf/invoices/{id}` (204; body opcional `{reason}`). NF ja `paga` nao mostra a acao — e mesmo assim o 409 do backend e exibido no modal. 404 e tratado como sucesso (ja tinha sido apagada). Depois do 204: toast + refetch da lista (ou redirect pra `/` quando vem do detalhe).
+
+A lista "A pagar" tambem tem a coluna **"Pago em"** (`paid_at`, ordenavel; "Paid On" pra publisher) e a lista "A receber" a coluna **"Recebido em"** (`received_at`). As duas usam `fmtDateOnly` de `lib/i18n.ts` — formata so a parte da data do ISO, sem conversao de timezone (senao um `T00:00:00+00:00` volta um dia em BRT).
 
 Campos de auditoria: `approval_adm_campanha_by/at`, `approval_admin_by/at`, `paid_by/at`, `paid_by_assignee_id`. Notas em 2 campos (`notes_supplier`, `notes_internal`) seguem como antes, editaveis via `PATCH /nf/invoices/{id}/notes`.
 

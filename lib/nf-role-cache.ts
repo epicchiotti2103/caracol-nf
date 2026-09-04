@@ -15,6 +15,8 @@ export type RoleCache = {
   // Permissões resolvidas pro papel atual (GET /perms/nf/me). Quando o backend
   // de perms não estiver no ar, vem de um fallback derivado do role (ver gate).
   permissions: string[];
+  // Flag `can_delete_invoices` do GET /nf/me/role. Ausente no backend = false.
+  canDeleteInvoices: boolean;
 };
 
 let roleCache: RoleCache | null = null;
@@ -35,5 +37,12 @@ export function setRoleCache(next: RoleCache | null) {
 export function setRoleCachePendingCount(count: number) {
   if (roleCache) {
     roleCache = { ...roleCache, pendingAssignedCount: count };
+  }
+}
+
+/** Mesma ideia do contador: mantem a flag de apagar NF fresca no cache. */
+export function setRoleCacheCanDelete(canDelete: boolean) {
+  if (roleCache) {
+    roleCache = { ...roleCache, canDeleteInvoices: canDelete };
   }
 }

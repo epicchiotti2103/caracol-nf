@@ -83,7 +83,7 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `POST /auth/login` — login
 - `POST /auth/refresh` — refresh do token (transparente via `lib/api.ts`)
 - `GET /hub/me/apps` — apps do user (gate de acesso)
-- `GET /nf/me/role` — `{role, pending_assigned_count}` — papel intra-NF + qtde de NFs `em_analise` atribuidas ao user (usado pelo banner "aguardando voce")
+- `GET /nf/me/role` — `{role, pending_assigned_count, pending_my_approval_count?, can_delete_invoices?}` — papel intra-NF + qtde de NFs `em_analise` atribuidas ao user (usado pelo banner "aguardando voce"). `can_delete_invoices` (bool) libera a acao "Apagar NF"; **ausente = false** no front (`useCanDeleteInvoices`), entao com backend antigo a acao some sozinha.
 - `GET /nf/invoices` — lista (filtrada por papel no backend). Cada item carrega campos derivados: `is_vencida`, `days_overdue`, `approvals_pending` (array de slots faltantes — `['adm_campanha']`, `['admin']`, `['adm_campanha','admin']` ou `[]`)
 - `GET /nf/invoices/{id}` — detalhe (inclui campos derivados acima + auditoria de aprovacoes duplas)
 - `GET /nf/invoices/{id}/pdf` — `{url}` assinada (5min)
@@ -93,6 +93,7 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `POST /nf/invoices/{id}/reject` — body `{reason, notes_internal?}`. So funciona em `em_analise`. `reason` vai pra `notes_supplier`.
 - `POST /nf/invoices/{id}/pay` — admin only. **Multipart/form-data** com campo `proof` **opcional** (PNG, JPEG ou PDF, max 10MB) + `fee`, `data` e `conta` (de qual conta saiu — `lib/contas.ts`: BRL = `conta_corrente`/`investimento`, USD = `helmbank`/`tronlink`; default `conta_corrente`/`helmbank` por moeda; backend antigo ignora o campo). Marca como `paga` e grava `paid_proof_path` no storage.
 - `GET /nf/invoices/{id}/proof` — `{url}` assinada (5min) pra baixar o comprovante de pagamento.
+- `DELETE /nf/invoices/{id}` — soft delete. Body opcional `{reason}`. Devolve **204**. Erros: **403** (sem permissao), **409** (NF ja paga — o `detail` explica), **404** (ja apagada; o front trata como sucesso). Gateado por `can_delete_invoices` do `/nf/me/role` — a acao aparece na lista "A pagar" e no detalhe, e some quando a NF esta `paga`.
 - `PATCH /nf/invoices/{id}/notes` — `{notes_supplier?, notes_internal?}` (admin OU adm_campanha) — edita notas sem mudar status
 - `PATCH /nf/invoices/{id}/assignee` — `{assignee_id: string | null}` (admin OU adm_campanha) — grava evento na timeline
 - `GET /nf/dashboard/summary` — agregacoes. Alem dos baldes legados (`pending_review`, `to_pay`, `paid_last_30d` em **BRL**), traz `pending_approvals_count`, `to_pay_count`, `overdue_count` pros chips do topo + os totais por moeda `to_pay_brl`/`to_pay_usd`, `overdue_brl`/`overdue_usd`, `paid_last_30d_brl`/`paid_last_30d_usd` (frontend trata `undefined` -> 0 enquanto backend nao deploya)

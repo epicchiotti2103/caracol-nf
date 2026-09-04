@@ -200,6 +200,9 @@ export interface MeRoleResponse {
   // Counter novo: NFs em_analise que AINDA precisam da MINHA aprovacao (papel).
   // Backend ainda em deploy — quando ausente, frontend faz fallback no antigo.
   pending_my_approval_count?: number;
+  // Permissao de apagar NF (soft delete via DELETE /nf/invoices/{id}).
+  // Ausente = false (backend pode nao ter subido ainda) -> acao some da UI.
+  can_delete_invoices?: boolean;
 }
 
 export interface DashboardBucket {

@@ -22,7 +22,8 @@ import {
   Layers,
   ArrowUp,
   ArrowDown,
-  ArrowUpDown
+  ArrowUpDown,
+  Trash2
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { BatchPayModal } from "@/components/nf/batch-pay-modal";
@@ -31,15 +32,18 @@ import { ApprovalBadge, OverdueBadge } from "@/components/nf/approval-badge";
 import { DashboardChips } from "@/components/nf/dashboard-chips";
 import { DateRangePicker } from "@/components/nf/date-range-picker";
 import { ReceivablesView } from "@/components/nf/receivables-view";
+import { DeleteInvoiceModal } from "@/components/nf/delete-invoice-modal";
 import { useAuth } from "@/lib/auth-context";
 import {
   useNfRole,
   langForRole,
+  useCanDeleteInvoices,
   usePendingAssignedCount,
   useRefreshRole
 } from "@/lib/nf-role-context";
 import { apiFetch } from "@/lib/api";
-import { fmtCurrency, fmtDate, fmtRefMonth, tr } from "@/lib/i18n";
+import { useToast } from "@/lib/toast-context";
+import { fmtCurrency, fmtDate, fmtDateOnly, fmtRefMonth, tr } from "@/lib/i18n";
 import type {
   DashboardSummary,
   Invoice,
@@ -108,6 +112,11 @@ function HomeContent() {
   const { user } = useAuth();
   const pendingAssignedCount = usePendingAssignedCount();
   const refreshRole = useRefreshRole();
+  const toast = useToast();
+  // Flag do backend (GET /nf/me/role). Ausente = false -> acao nem aparece.
+  const canDeleteInvoices = useCanDeleteInvoices();
+  // NF selecionada pro modal de "Apagar NF" (renderizado fora da <tr>).
+  const [deleting, setDeleting] = useState<Invoice | null>(null);
 
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -434,6 +443,20 @@ function HomeContent() {
       </div>
 
       {batchOpen && <BatchPayModal onClose={() => setBatchOpen(false)} onPaid={load} />}
+
+      {deleting && (
+        <DeleteInvoiceModal
+          invoice={deleting}
+          lang={lang}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => {
+            setDeleting(null);
+            toast.success(lang === "pt" ? "NF apagada" : "Invoice deleted");
+            // Refetch (em vez de so tirar a linha) pra chips/summary nao ficarem stale.
+            load();
+          }}
+        />
+      )}
 
       {/* Linha de filtros (apenas para admin/adm_campanha) */}
       {showFilters && (
@@ -790,6 +813,8 @@ function HomeContent() {
                     invoice={inv}
                     role={role}
                     isLast={i === displayed.length - 1}
+                    canDelete={canDeleteInvoices}
+                    onDelete={() => setDeleting(inv)}
                     onClick={() => router.push(`/invoice/${inv.id}`)}
                   />
                 ))
@@ -865,6 +890,7 @@ type SortKey =
   | "due_date"
   | "reference_month"
   | "status"
+  | "paid_at"
   | "supplier"
   | "assignee";
 type SortDir = "asc" | "desc";
@@ -893,6 +919,9 @@ function sortValue(inv: Invoice, key: SortKey): string | number {
       return inv.reference_month || "";
     case "status":
       return STATUS_RANK[inv.status] ?? 99;
+    case "paid_at":
+      // ISO ordena lexicograficamente; sem pagamento cai como vazio (vai pro fim).
+      return inv.paid_at || "";
     case "supplier":
       return (inv.supplier_name ?? inv.publisher_name ?? "").toLowerCase();
     case "assignee":
@@ -912,6 +941,7 @@ function columnsFor(role: string): Column[] {
       { label: "Due Date", sortKey: "due_date" },
       { label: "Reference Month", sortKey: "reference_month" },
       { label: "Status", sortKey: "status" },
+      { label: "Paid On", sortKey: "paid_at" },
       { label: "PDF" },
       { label: "" }
     ];
@@ -922,6 +952,7 @@ function columnsFor(role: string): Column[] {
     { label: "Vencimento", sortKey: "due_date" },
     { label: "Mes Ref", sortKey: "reference_month" },
     { label: "Status", sortKey: "status" },
+    { label: "Pago em", sortKey: "paid_at" },
     { label: "Aprovacoes" },
     { label: "Fornecedor", sortKey: "supplier" },
     { label: "Responsavel", sortKey: "assignee" },
@@ -974,11 +1005,15 @@ function InvoiceRow({
   invoice,
   role,
   isLast,
+  canDelete,
+  onDelete,
   onClick
 }: {
   invoice: Invoice;
   role: string;
   isLast: boolean;
+  canDelete: boolean;
+  onDelete: () => void;
   onClick: () => void;
 }) {
   const lang = role === "publisher" ? "en" : "pt";
@@ -1035,6 +1070,9 @@ function InvoiceRow({
       <td className="whitespace-nowrap px-5 py-4">
         <StatusBadge status={invoice.status} lang={lang} />
       </td>
+      <td className="whitespace-nowrap px-5 py-4 text-muted">
+        {invoice.paid_at ? fmtDateOnly(invoice.paid_at, lang) : "—"}
+      </td>
       {role !== "publisher" && (
         <td className="whitespace-nowrap px-5 py-4">
           <ApprovalBadge invoice={invoice} />
@@ -1068,7 +1106,21 @@ function InvoiceRow({
         )}
       </td>
       <td className="px-5 py-4">
-        <Eye className="h-4 w-4 text-muted opacity-0 transition-opacity group-hover:opacity-100" />
+        <div className="flex items-center gap-1">
+          {canDelete && invoice.status !== "paga" && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+              className="rounded p-1.5 text-muted transition-colors hover:bg-background hover:text-danger"
+              title={lang === "pt" ? "Apagar NF" : "Delete invoice"}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+          <Eye className="h-4 w-4 text-muted opacity-0 transition-opacity group-hover:opacity-100" />
+        </div>
       </td>
     </tr>
   );

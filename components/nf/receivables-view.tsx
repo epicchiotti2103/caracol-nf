@@ -18,7 +18,7 @@ import {
   X
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
-import { fmtCurrency, fmtDate, fmtRefMonth } from "@/lib/i18n";
+import { fmtCurrency, fmtDate, fmtDateOnly, fmtRefMonth } from "@/lib/i18n";
 import { useNfRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { ReceivableEditModal } from "@/components/nf/receivable-edit-modal";
@@ -473,6 +473,7 @@ export function ReceivablesView() {
                   "Vencimento",
                   "Mes Ref",
                   "Status",
+                  "Recebido em",
                   "Acoes"
                 ].map((h) => (
                   <th
@@ -487,13 +488,13 @@ export function ReceivablesView() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center">
+                  <td colSpan={9} className="py-16 text-center">
                     <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
                   </td>
                 </tr>
               ) : filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center">
+                  <td colSpan={9} className="py-16 text-center">
                     <Wallet className="mx-auto mb-3 h-8 w-8 opacity-20" />
                     <p className="text-sm text-muted">
                       {hasActiveFilters || search
@@ -699,6 +700,11 @@ function ReceivableRow({
       </td>
       <td className="whitespace-nowrap px-5 py-4">
         <ReceivableStatusBadge status={r.status} />
+      </td>
+      <td className="whitespace-nowrap px-5 py-4 text-muted">
+        {/* `received_at` vem como timestamp ISO — fmtDateOnly evita o
+            deslocamento de um dia por timezone. */}
+        {r.received_at ? fmtDateOnly(r.received_at, "pt") : "—"}
       </td>
       <td className="whitespace-nowrap px-5 py-4">
         <div className="flex items-center gap-1.5">

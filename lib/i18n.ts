@@ -89,6 +89,23 @@ export function fmtDate(s: string | null | undefined, lang: Lang): string {
   return d.toLocaleDateString(lang === "en" ? "en-US" : "pt-BR");
 }
 
+/**
+ * Formata SO a parte da data de um ISO (date ou datetime), sem conversao de
+ * timezone. `fmtDate` joga a string no `new Date()` e deixa o browser converter
+ * pro fuso local — o que desloca um dia em timestamps como
+ * "2026-08-01T00:00:00+00:00" (vira 31/07 em BRT). Datas de pagamento/
+ * recebimento vem como timestamp do backend (o lote grava T12:00:00+00:00),
+ * entao usamos este helper nelas.
+ */
+export function fmtDateOnly(s: string | null | undefined, lang: Lang): string {
+  if (!s) return "—";
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s.trim());
+  if (!m) return fmtDate(s, lang);
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(lang === "en" ? "en-US" : "pt-BR");
+}
+
 export function fmtDateTime(s: string | null | undefined, lang: Lang): string {
   if (!s) return "—";
   const d = new Date(s);
