@@ -22,6 +22,7 @@ import { fmtCurrency, fmtDate, fmtDateOnly, fmtRefMonth } from "@/lib/i18n";
 import { useNfRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { ReceivableEditModal } from "@/components/nf/receivable-edit-modal";
+import { TagQuickEdit } from "@/components/nf/tag-quick-edit";
 import { ReceivableReceiveModal } from "@/components/nf/receivable-receive-modal";
 import type {
   Client,
@@ -510,6 +511,17 @@ export function ReceivablesView() {
                     r={r}
                     isLast={i === filtered.length - 1}
                     canManage={canManage}
+                    canEditTag={canSee && r.status !== "cancelada"}
+                    onTagSaved={(tagId, tagName) => {
+                      setList((prev) =>
+                        prev.map((x) =>
+                          x.id === r.id
+                            ? { ...x, tag_id: tagId, tag_name: tagName }
+                            : x
+                        )
+                      );
+                      toast.success("Tag atualizada.");
+                    }}
                     busy={busyId === r.id}
                     onEdit={openEdit}
                     onReceive={openReceive}
@@ -622,6 +634,8 @@ function ReceivableRow({
   r,
   isLast,
   canManage,
+  canEditTag,
+  onTagSaved,
   busy,
   onEdit,
   onReceive,
@@ -632,6 +646,8 @@ function ReceivableRow({
   r: NfReceivable;
   isLast: boolean;
   canManage: boolean;
+  canEditTag: boolean;
+  onTagSaved: (tagId: string | null, tagName: string | null) => void;
   busy: boolean;
   onEdit: (r: NfReceivable) => void;
   onReceive: (r: NfReceivable) => void;
@@ -656,13 +672,18 @@ function ReceivableRow({
             {r.description}
           </p>
         )}
-        {(r.tag_name || (r.campanhas && r.campanhas.length > 0)) && (
+        {(r.tag_name || canEditTag || (r.campanhas && r.campanhas.length > 0)) && (
           <div className="mt-1 flex flex-wrap items-center gap-1">
-            {r.tag_name && (
-              <span className="inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
-                {r.tag_name}
-              </span>
-            )}
+            {/* Tag editavel em qualquer status (exceto cancelada) — rota
+                dedicada PATCH /nf/receivables/{id}/tag. */}
+            <TagQuickEdit
+              kind="receivable"
+              id={r.id}
+              tagId={r.tag_id}
+              tagName={r.tag_name}
+              editable={canEditTag}
+              onSaved={onTagSaved}
+            />
             {r.campanhas && r.campanhas.length > 0 && (
               <span className="inline-flex items-center rounded-full border border-border bg-background px-2 py-0.5 text-[10px] font-medium text-muted">
                 {r.campanhas.length}{" "}

@@ -19,6 +19,7 @@ import { StatusBadge } from "@/components/status-badge";
 import { ApprovalBadge, OverdueBadge } from "@/components/nf/approval-badge";
 import { InvoiceEvents } from "@/components/nf/invoice-events";
 import { InvoiceEditModal } from "@/components/nf/invoice-edit-modal";
+import { TagQuickEdit } from "@/components/nf/tag-quick-edit";
 import { useAuth } from "@/lib/auth-context";
 import {
   useNfRole,
@@ -444,6 +445,9 @@ function InvoiceDetail({ id }: { id: string }) {
     !youApprovedAsAdmin;
   const canReject = canDecide && isEmAnalise;
   const canPay = role === "admin" && isAprovada;
+  // Tag e editavel em QUALQUER status (rota dedicada PATCH /nf/invoices/{id}/tag);
+  // o resto dos dados continua travado fora de em_analise.
+  const canEditTag = role === "admin" || role === "adm_campanha";
 
   // Admin completando a dupla = ele aprova quando adm_campanha ja aprovou.
   const adminCompletingFlow =
@@ -722,7 +726,28 @@ function InvoiceDetail({ id }: { id: string }) {
         ) : (
           <Row label={t.refMonth} value={fmtRefMonth(invoice.reference_month, lang)} />
         )}
-        {invoice.tag_name && <Row label="Tag" value={invoice.tag_name} />}
+        {(invoice.tag_name || canEditTag) && (
+          <div className="flex items-baseline justify-between gap-4">
+            <p className="text-xs uppercase tracking-wider text-muted">Tag</p>
+            <div className="text-right">
+              <TagQuickEdit
+                kind="invoice"
+                id={invoice.id}
+                tagId={invoice.tag_id}
+                tagName={invoice.tag_name}
+                editable={canEditTag}
+                variant="inline"
+                onSaved={(tagId, tagName) => {
+                  setInvoice((prev) =>
+                    prev ? { ...prev, tag_id: tagId, tag_name: tagName } : prev
+                  );
+                  toast.success("Tag atualizada");
+                  setEventsRefreshKey((k) => k + 1);
+                }}
+              />
+            </div>
+          </div>
+        )}
         {role !== "publisher" && (
           <Row
             label={t.publisher}
