@@ -504,6 +504,8 @@ export type LinkSuggestionMatch = "exato" | "aproximado" | "divergente";
 export interface LinkSuggestionCandidate {
   campaign_id: string;
   campaign_name: string | null;
+  codigo?: string | null;
+  fechamento_status?: "travado" | "fechado" | string | null;
   month: string | null;                    // "YYYY-MM" ou "YYYY-MM-01"
   publisher_amount: number | string | null; // Decimal pode vir string
 }
@@ -514,7 +516,14 @@ export interface LinkSuggestion {
   supplier_id: string | null;
   supplier_name: string | null;
   amount: number | string | null;
+  // Valor da competencia DAQUELE mes (= amount em NF de 1 competencia).
+  // `match`/`diff` do backend comparam candidates_total com amount_month.
+  amount_month?: number | string | null;
   currency: string | null;
+  status?: string | null;
+  due_date?: string | null;
+  already_linked_campaign_ids?: string[];
+  diff?: number | string | null;
   // Backend pode mandar string ("YYYY-MM[-01]") ou NfCompetencia.
   competencias: (string | NfCompetencia)[];
   candidates: LinkSuggestionCandidate[];
@@ -529,5 +538,6 @@ export interface LinkSuggestionsResponse {
 
 export interface LinkSuggestionApplyResponse {
   invoice_id: string;
-  linked_campaign_ids: string[];
+  linked_campaign_ids: string[];   // inclui os que ja estavam vinculados
+  added?: { campaign_id: string; valor_alocado: number }[];
 }

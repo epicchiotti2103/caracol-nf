@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
+  AlertTriangle,
   CheckCircle2,
   Clock,
   ExternalLink,
@@ -23,7 +24,7 @@ import {
   recentMonthOptions,
   toNum
 } from "@/lib/link-suggestions";
-import { fmtCurrency, fmtRefMonth } from "@/lib/i18n";
+import { fmtCurrency, fmtDateOnly, fmtRefMonth } from "@/lib/i18n";
 import type {
   LinkSuggestion,
   LinkSuggestionApplyResponse,
@@ -105,10 +106,12 @@ function SugestoesContent() {
       }
       setUnavailable(false);
       setItems(res.data.suggestions);
-      // Default: todas as candidatas marcadas.
+      // Default: todas as candidatas marcadas — exceto match divergente,
+      // que comeca desmarcado (valor nao bate, conferir a NF antes).
       const sel: Record<string, string[]> = {};
       for (const s of res.data.suggestions) {
-        sel[s.invoice_id] = (s.candidates || []).map((c) => c.campaign_id);
+        sel[s.invoice_id] =
+          s.match === "divergente" ? [] : (s.candidates || []).map((c) => c.campaign_id);
       }
       setSelected(sel);
     } catch (err) {
@@ -151,7 +154,8 @@ function SugestoesContent() {
           body: JSON.stringify({ invoice_id: s.invoice_id, campaign_ids: ids })
         }
       );
-      const n = res?.linked_campaign_ids?.length ?? ids.length;
+      // `added` = so os vinculos novos (linked_campaign_ids inclui os antigos).
+      const n = Array.isArray(res?.added) ? res.added.length : ids.length;
       toast.success(
         `NF ${s.number || ""} vinculada a ${n} ${n === 1 ? "campanha" : "campanhas"}`.replace(
           /\s+/g,
@@ -296,11 +300,16 @@ function SuggestionCard({
 }) {
   const moeda = moedaOf(s.currency);
   const amount = toNum(s.amount);
+  // Base de comparacao: valor da competencia do mes (fallback: valor da NF).
+  const hasMonth = s.amount_month != null && s.amount_month !== "";
+  const base = hasMonth ? toNum(s.amount_month) : amount;
+  const showBoth = hasMonth && Math.abs(base - amount) > 0.005;
+  const alreadyLinked = s.already_linked_campaign_ids?.length || 0;
   const candidates = s.candidates || [];
   const selectedTotal = candidates
     .filter((c) => selectedIds.includes(c.campaign_id))
     .reduce((acc, c) => acc + toNum(c.publisher_amount), 0);
-  const diff = selectedTotal - amount;
+  const diff = selectedTotal - base;
   const allSelected = selectedIds.length === candidates.length;
   const badge = matchBadge(s.match);
   const competencias = (s.competencias || []).map(competenciaLabel).filter(Boolean);
@@ -320,6 +329,13 @@ function SuggestionCard({
           <p className="mt-1 text-xs text-muted">
             NF {s.number || "—"}
             {competencias.length > 0 && <> · competencia {competencias.join(", ")}</>}
+            {s.due_date && <> · vence {fmtDateOnly(s.due_date, "pt")}</>}
+            {alreadyLinked > 0 && (
+              <>
+                {" · "}
+                {alreadyLinked} {alreadyLinked === 1 ? "campanha ja vinculada" : "campanhas ja vinculadas"}
+              </>
+            )}
             {" · "}
             <Link
               href={`/invoice/${s.invoice_id}`}
@@ -331,13 +347,28 @@ function SuggestionCard({
         </div>
         <div className="text-right">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
-            Valor da NF
+            {showBoth ? "Neste mes" : "Valor da NF"}
           </p>
           <p className="text-lg font-semibold text-foreground">
-            {fmtCurrency(amount, moeda, "pt")}
+            {fmtCurrency(base, moeda, "pt")}
           </p>
+          {showBoth && (
+            <p className="text-xs text-muted">
+              {fmtCurrency(base, moeda, "pt")} neste mes (NF total{" "}
+              {fmtCurrency(amount, moeda, "pt")})
+            </p>
+          )}
         </div>
       </div>
+
+      {s.match === "divergente" && (
+        <div className="mt-3 flex items-center gap-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2">
+          <AlertTriangle className="h-4 w-4 flex-shrink-0 text-danger" />
+          <span className="text-xs text-danger">
+            Valor nao bate — confira a NF antes de vincular.
+          </span>
+        </div>
+      )}
 
       <div className="mt-3 space-y-2">
         {candidates.map((c) => {
@@ -360,11 +391,23 @@ function SuggestionCard({
                   className="h-4 w-4 accent-primary"
                 />
                 <span className="truncate text-sm text-foreground">
-                  {c.campaign_name || c.campaign_id.slice(0, 8)}
+                  {[c.codigo, c.campaign_name].filter(Boolean).join(" — ") ||
+                    c.campaign_id.slice(0, 8)}
                   {c.month && (
                     <span className="text-muted"> · {fmtRefMonth(c.month, "pt")}</span>
                   )}
                 </span>
+                {c.fechamento_status && (
+                  <span
+                    className={`flex-shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                      c.fechamento_status === "travado"
+                        ? "bg-zinc-700/40 text-zinc-300"
+                        : "bg-blue-500/15 text-blue-300"
+                    }`}
+                  >
+                    {c.fechamento_status}
+                  </span>
+                )}
               </div>
               <span className="flex-shrink-0 text-sm text-foreground">
                 {c.publisher_amount == null
@@ -382,8 +425,8 @@ function SuggestionCard({
           <span className="font-medium text-foreground">
             {fmtCurrency(selectedTotal, moeda, "pt")}
           </span>
-          {" vs NF "}
-          <span className="font-medium text-foreground">{fmtCurrency(amount, moeda, "pt")}</span>
+          {showBoth ? " vs mes " : " vs NF "}
+          <span className="font-medium text-foreground">{fmtCurrency(base, moeda, "pt")}</span>
           {selectedIds.length > 0 && (
             <span
               className={`ml-2 font-semibold ${
