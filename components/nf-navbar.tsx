@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 import { useNfRole, useCan, langForRole } from "@/lib/nf-role-context";
 import { HUB_URL } from "@/lib/config";
-import { Building2, FileText, LogOut, ArrowLeft, ShieldCheck, Tag, Truck, User, Users } from "lucide-react";
+import { Building2, FileText, Link2, LogOut, ArrowLeft, ShieldCheck, Tag, Truck, User, Users } from "lucide-react";
 import type { NfPermKey } from "@/types";
 
 // perm: key de permissão exigida pra ver o link (gating dinâmico via `can`).
@@ -24,6 +24,7 @@ type LinkDef = {
 const linksByLang: Record<"pt" | "en", LinkDef[]> = {
   pt: [
     { href: "/", label: "Notas", icon: FileText },
+    { href: "/sugestoes-vinculo", label: "Sugestoes", icon: Link2 },
     { href: "/admin/clientes", label: "Clientes", icon: Building2, perm: "nf.clientes.view" },
     { href: "/admin/fornecedores", label: "Fornecedores", icon: Truck, perm: "nf.fornecedores.view" },
     { href: "/admin/usuarios-nf", label: "Usuarios", icon: Users, perm: "nf.usuarios.view" },

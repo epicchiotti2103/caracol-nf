@@ -33,6 +33,7 @@ import { DashboardChips } from "@/components/nf/dashboard-chips";
 import { DateRangePicker } from "@/components/nf/date-range-picker";
 import { ReceivablesView } from "@/components/nf/receivables-view";
 import { DeleteInvoiceModal } from "@/components/nf/delete-invoice-modal";
+import { LinkSuggestionsBanner } from "@/components/nf/link-suggestions-banner";
 import { useAuth } from "@/lib/auth-context";
 import {
   useNfRole,
@@ -610,6 +611,8 @@ function HomeContent() {
           overdueActive={overdueOnly}
         />
       )}
+
+      {isAdminView && <LinkSuggestionsBanner />}
 
       {showAssignedBanner && (
         <button

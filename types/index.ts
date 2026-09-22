@@ -494,3 +494,40 @@ export interface FechamentoSugestaoItem {
   valor_sugerido: number;
   moeda: "BRL" | "USD";
 }
+
+// ── Sugestoes de vinculo NF a pagar -> campanha ─────────────────────────────
+// GET  /api/v1/nf/link-suggestions?month=YYYY-MM
+// POST /api/v1/nf/link-suggestions/apply { invoice_id, campaign_ids }
+// NF a pagar sem campanha vinculada + campanhas candidatas (mesmo publisher/mes).
+export type LinkSuggestionMatch = "exato" | "aproximado" | "divergente";
+
+export interface LinkSuggestionCandidate {
+  campaign_id: string;
+  campaign_name: string | null;
+  month: string | null;                    // "YYYY-MM" ou "YYYY-MM-01"
+  publisher_amount: number | string | null; // Decimal pode vir string
+}
+
+export interface LinkSuggestion {
+  invoice_id: string;
+  number: string | null;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  amount: number | string | null;
+  currency: string | null;
+  // Backend pode mandar string ("YYYY-MM[-01]") ou NfCompetencia.
+  competencias: (string | NfCompetencia)[];
+  candidates: LinkSuggestionCandidate[];
+  candidates_total: number | string | null;
+  match: LinkSuggestionMatch;
+}
+
+export interface LinkSuggestionsResponse {
+  month: string;
+  suggestions: LinkSuggestion[];
+}
+
+export interface LinkSuggestionApplyResponse {
+  invoice_id: string;
+  linked_campaign_ids: string[];
+}
