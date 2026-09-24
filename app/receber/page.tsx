@@ -9,6 +9,13 @@ import { redirect } from "next/navigation";
  *  - link direto / bookmark
  *  - eventual atalho no header
  */
-export default function ReceberPage() {
-  redirect("/?view=receber");
+export default function ReceberPage({
+  searchParams
+}: {
+  searchParams?: { id?: string | string[] };
+}) {
+  // `?id=<uuid>` e repassado: a lista rola ate a NF e destaca a linha.
+  const raw = searchParams?.id;
+  const id = Array.isArray(raw) ? raw[0] : raw;
+  redirect(id ? `/?view=receber&id=${encodeURIComponent(id)}` : "/?view=receber");
 }

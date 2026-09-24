@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
   CheckCircle,
@@ -69,6 +70,14 @@ export function ReceivablesView() {
   const canManage = role === "admin"; // soh admin edita/marca/cancela
   const canCreate = role === "admin" || role === "adm_campanha"; // admin e adm_campanha criam
   const canSee = role === "admin" || role === "adm_campanha";
+
+  // Link direto: /receber?id=<uuid> (ou /?view=receber&id=<uuid>) rola ate a
+  // linha e destaca. Usado pelo painel de fechamento do Campanhas.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const focusId = searchParams?.get("id") || "";
+  const focusHandled = useRef(false);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
 
   const [list, setList] = useState<NfReceivable[]>([]);
   const [summary, setSummary] = useState<NfReceivableSummary | null>(null);
@@ -143,6 +152,33 @@ export function ReceivablesView() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverQuery, canSee]);
+
+  // Resolve o ?id= uma unica vez, apos a primeira carga sem filtros (lista
+  // completa, sem paginacao — se nao esta nela, nao existe ou foi apagada).
+  useEffect(() => {
+    if (!focusId || focusHandled.current || loading || !canSee) return;
+    focusHandled.current = true;
+    const qs = new URLSearchParams(searchParams?.toString() || "");
+    qs.delete("id");
+    router.replace(`/?${qs.toString()}`, { scroll: false });
+    if (!list.some((r) => r.id === focusId)) {
+      toast.info("NF a receber do link nao encontrada (pode ter sido removida).");
+      return;
+    }
+    setHighlightId(focusId);
+    requestAnimationFrame(() => {
+      document
+        .getElementById(`rcv-${focusId}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusId, loading, list, canSee]);
+
+  useEffect(() => {
+    if (!highlightId) return;
+    const t = setTimeout(() => setHighlightId(null), 6000);
+    return () => clearTimeout(t);
+  }, [highlightId]);
 
   // Carrega clientes uma vez (pra dropdown de filtro)
   useEffect(() => {
@@ -510,6 +546,7 @@ export function ReceivablesView() {
                     key={r.id}
                     r={r}
                     isLast={i === filtered.length - 1}
+                    highlighted={highlightId === r.id}
                     canManage={canManage}
                     canEditTag={canSee && r.status !== "cancelada"}
                     onTagSaved={(tagId, tagName) => {
@@ -633,6 +670,7 @@ function ReceivableStatCard({
 function ReceivableRow({
   r,
   isLast,
+  highlighted,
   canManage,
   canEditTag,
   onTagSaved,
@@ -645,6 +683,7 @@ function ReceivableRow({
 }: {
   r: NfReceivable;
   isLast: boolean;
+  highlighted?: boolean;
   canManage: boolean;
   canEditTag: boolean;
   onTagSaved: (tagId: string | null, tagName: string | null) => void;
@@ -659,9 +698,10 @@ function ReceivableRow({
 
   return (
     <tr
+      id={`rcv-${r.id}`}
       className={`transition-colors hover:bg-background ${
         !isLast ? "border-b border-border" : ""
-      }`}
+      } ${highlighted ? "bg-primary/10 ring-2 ring-inset ring-primary/50" : ""}`}
     >
       <td className="px-5 py-4">
         <p className="text-sm font-medium text-foreground">

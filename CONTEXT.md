@@ -291,3 +291,7 @@ Se voce e uma IA chegando aqui sem contexto:
    - `useNfRole()` + `langForRole(role)` pra resolver idioma
    - `fmtCurrency / fmtDate / fmtRefMonth / fmtDateTime` em `lib/i18n.ts`
    - `StatusBadge` com prop `lang`
+
+### Link direto pra NF a receber
+
+- `/receber` — atalho que redireciona pra `/?view=receber` (aba A receber). **Link direto por NF**: `/receber?id=<uuid>` (ou `/?view=receber&id=<uuid>`) carrega a lista completa, rola ate a linha e destaca por ~6s; o `id` sai da URL em seguida. Id inexistente/apagado → toast info discreto. Usado pelo painel de fechamento do Campanhas.
