@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { FileUp, Loader2, Upload, X } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetchStrict, readableError } from "@/lib/api-error";
 import {
   NfTagCampanhaFields,
   campanhaLinksToDrafts,
@@ -15,6 +15,7 @@ import type {
   Moeda,
   NfReceivable
 } from "@/types";
+import { parseBrNumber } from "@/lib/number";
 
 const MAX_PDF_MB = 10;
 
@@ -120,7 +121,7 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
       try {
         const params = new URLSearchParams({ active: "true" });
         if (debouncedClientSearch) params.set("q", debouncedClientSearch);
-        const res: { items: Client[] } | Client[] = await apiFetch(
+        const res: { items: Client[] } | Client[] = await apiFetchStrict(
           `/clients?${params.toString()}`
         );
         const items = Array.isArray(res) ? res : res?.items || [];
@@ -132,7 +133,7 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
         setClients(items);
       } catch (err: any) {
         if (cancelled) return;
-        setClientsError(err?.message || "Falha ao carregar clientes.");
+        setClientsError(readableError(err, "Falha ao carregar clientes."));
       } finally {
         if (!cancelled) setLoadingClients(false);
       }
@@ -160,7 +161,7 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
   // ----- Validacao -----
   const validate = (): string | null => {
     if (!clientId) return "Selecione um cliente.";
-    const amt = parseFloat((amount || "").replace(",", "."));
+    const amt = parseBrNumber(amount);
     if (isNaN(amt) || amt <= 0) return "Valor deve ser maior que zero.";
     if (!dueDate) return "Vencimento obrigatorio.";
     if (!refMonth) return "Mes de referencia obrigatorio.";
@@ -183,7 +184,7 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
     if (trimmedInv !== (receivable.invoice_number || "")) {
       out.invoice_number = trimmedInv || null;
     }
-    const parsed = parseFloat((amount || "").replace(",", "."));
+    const parsed = parseBrNumber(amount);
     const origAmount = receivable.amount != null ? Number(receivable.amount) : NaN;
     if (!isNaN(parsed) && parsed !== origAmount) {
       out.amount = String(parsed);
@@ -262,7 +263,7 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
       let saved: NfReceivable;
       if (isEdit && receivable) {
         // PATCH JSON
-        saved = await apiFetch(`/nf/receivables/${receivable.id}`, {
+        saved = await apiFetchStrict(`/nf/receivables/${receivable.id}`, {
           method: "PATCH",
           body: JSON.stringify(diff)
         });
@@ -270,7 +271,7 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
         // POST multipart
         const fd = new FormData();
         fd.append("client_id", clientId);
-        fd.append("amount", String(parseFloat(amount.replace(",", "."))));
+        fd.append("amount", String(parseBrNumber(amount)));
         fd.append("due_date", dueDate);
         fd.append("reference_month", refIso);
         fd.append("moeda", moeda);
@@ -286,11 +287,11 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
           fd.append("campanhas_json", JSON.stringify(campanhasPayload));
         }
         if (hasInvoice && pdf) fd.append("pdf", pdf);
-        saved = await apiFetch(`/nf/receivables`, { method: "POST", body: fd });
+        saved = await apiFetchStrict(`/nf/receivables`, { method: "POST", body: fd });
       }
       onSaved(saved);
     } catch (err: any) {
-      setError(err?.message || "Falha ao salvar.");
+      setError(readableError(err, "Falha ao salvar."));
     } finally {
       setSaving(false);
     }
@@ -590,7 +591,7 @@ export function ReceivableEditModal({ receivable, onClose, onSaved }: Props) {
               onTagChange={setTagId}
               campanhas={campanhaLinks}
               onCampanhasChange={setCampanhaLinks}
-              totalNf={parseFloat((amount || "").replace(",", ".")) || undefined}
+              totalNf={parseBrNumber(amount) || undefined}
               moeda={moeda}
             />
 

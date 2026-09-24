@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { X, Loader2, Upload, AlertCircle } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { fetchAllInvoices } from "@/lib/fetch-all-invoices";
+import { parseBrNumberOr0 } from "@/lib/number";
 import {
   apiFetchStrict,
   duplicateDetail,
@@ -54,11 +55,11 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
       setLoading(true);
       setError("");
       try {
-        const res: { items: Invoice[] } | Invoice[] = await apiFetch("/nf/invoices?status=aprovada");
-        const items = Array.isArray(res) ? res : res.items;
+        // Todas as aprovadas (paginando) — "selecionar todas" cobre o conjunto completo.
+        const items = await fetchAllInvoices("status=aprovada");
         setAprovadas(items.filter((i) => i.status === "aprovada"));
       } catch (err: any) {
-        setError(err?.message || "Falha ao carregar NFs aprovadas.");
+        setError(readableError(err, "Falha ao carregar NFs aprovadas."));
       } finally {
         setLoading(false);
       }
@@ -69,8 +70,7 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
   const selectedInvoices = doMoeda.filter((i) => selected.has(i.id));
   const somaNfs = selectedInvoices.reduce((s, i) => s + (i.amount || 0), 0);
   const feeNum = useMemo(() => {
-    const n = parseFloat(fee.replace(/\./g, "").replace(",", "."));
-    return Number.isFinite(n) ? n : 0;
+    return parseBrNumberOr0(fee);
   }, [fee]);
   const totalSaida = somaNfs + feeNum;
 

@@ -44,6 +44,8 @@ import {
 } from "@/lib/nf-role-context";
 import { apiFetch } from "@/lib/api";
 import { useToast } from "@/lib/toast-context";
+import { fetchAllInvoices } from "@/lib/fetch-all-invoices";
+import { readableError } from "@/lib/api-error";
 import { fmtCurrency, fmtDate, fmtDateOnly, fmtRefMonth, tr } from "@/lib/i18n";
 import type {
   DashboardSummary,
@@ -221,9 +223,9 @@ function HomeContent() {
     setLoading(true);
     setError("");
     try {
-      const url = serverQuery ? `/nf/invoices?${serverQuery}` : "/nf/invoices";
-      const list: { items: Invoice[]; total: number } | Invoice[] = await apiFetch(url);
-      const items = Array.isArray(list) ? list : list?.items || [];
+      // Carrega o conjunto COMPLETO (pagina ate total) — card "Total" e
+      // filtros client-side precisam de todas as NFs, nao so da 1a pagina.
+      const items = await fetchAllInvoices(serverQuery);
       setInvoices(items);
       // Revalida o contador do banner "NFs aguardando sua aprovacao"
       // junto com a lista, pra nao ficar stale ate um reload completo.
@@ -240,7 +242,7 @@ function HomeContent() {
         }
       }
     } catch (err: any) {
-      setError(err?.message || (lang === "pt" ? "Falha ao carregar" : "Failed to load"));
+      setError(readableError(err, lang === "pt" ? "Falha ao carregar" : "Failed to load"));
     } finally {
       setLoading(false);
     }

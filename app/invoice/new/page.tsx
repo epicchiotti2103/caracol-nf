@@ -37,6 +37,7 @@ import {
   type DuplicateDetail
 } from "@/lib/api-error";
 import type { Supplier } from "@/types";
+import { parseBrNumber } from "@/lib/number";
 
 const MAX_PDF_MB = 10;
 
@@ -89,7 +90,7 @@ function NewInvoiceForm() {
   // 409 estruturado devolvido pelo POST (bloqueio de numero ou aviso de duplicata)
   const [dupDetail, setDupDetail] = useState<DuplicateDetail | null>(null);
 
-  const amountNum = parseFloat((amount || "").replace(",", ".")) || 0;
+  const amountNum = parseBrNumber(amount) || 0;
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -174,7 +175,7 @@ function NewInvoiceForm() {
   const validate = () => {
     if (isAdmin && !supplierId) return labels.supplierRequired;
     if (!invoiceNumber.trim()) return labels.invoiceNumber + " — " + labels.required;
-    const amt = parseFloat(amount.replace(",", "."));
+    const amt = parseBrNumber(amount);
     if (isNaN(amt) || amt <= 0) return labels.amountGt0;
     if (!dueDate) return labels.dueDate + " — " + labels.required;
     const compErr = validateCompetencias(competencias, amt, lang, moeda);
@@ -443,7 +444,7 @@ function NewInvoiceForm() {
           onTagChange={setTagId}
           campanhas={campanhaLinks}
           onCampanhasChange={setCampanhaLinks}
-          totalNf={parseFloat((amount || "").replace(",", ".")) || undefined}
+          totalNf={parseBrNumber(amount) || undefined}
           moeda={moeda}
           supplierId={isAdmin ? supplierId || undefined : undefined}
         />

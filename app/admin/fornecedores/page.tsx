@@ -16,7 +16,7 @@ import { AppShell } from "@/components/app-shell";
 import { SupplierEditModal } from "@/components/nf/supplier-edit-modal";
 import { useCan } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetchStrict, readableError } from "@/lib/api-error";
 import type { Supplier, ClientEntity } from "@/types";
 
 type ActiveFilter = "active" | "inactive" | "all";
@@ -77,8 +77,8 @@ function FornecedoresContent() {
       let items: Supplier[] = [];
       if (activeFilter === "all") {
         const [resTrue, resFalse] = await Promise.all([
-          apiFetch(`/suppliers?${withActive(params, "true")}`),
-          apiFetch(`/suppliers?${withActive(params, "false")}`)
+          apiFetchStrict(`/suppliers?${withActive(params, "true")}`),
+          apiFetchStrict(`/suppliers?${withActive(params, "false")}`)
         ]);
         const a = Array.isArray(resTrue) ? resTrue : resTrue?.items || [];
         const b = Array.isArray(resFalse) ? resFalse : resFalse?.items || [];
@@ -86,14 +86,14 @@ function FornecedoresContent() {
           (x.name || "").localeCompare(y.name || "")
         );
       } else {
-        const res: { items: Supplier[] } | Supplier[] = await apiFetch(
+        const res: { items: Supplier[] } | Supplier[] = await apiFetchStrict(
           `/suppliers?${params.toString()}`
         );
         items = Array.isArray(res) ? res : res?.items || [];
       }
       setSuppliers(items);
     } catch (err: any) {
-      setError(err?.message || "Falha ao carregar fornecedores.");
+      setError(readableError(err, "Falha ao carregar fornecedores."));
     } finally {
       setLoading(false);
     }
@@ -132,7 +132,7 @@ function FornecedoresContent() {
     if (!confirm(`Tem certeza que quer ${verb} "${s.name}"?`)) return;
     setBusyId(s.id);
     try {
-      const updated: Supplier = await apiFetch(
+      const updated: Supplier = await apiFetchStrict(
         `/suppliers/${s.id}/toggle-active`,
         { method: "PATCH" }
       );
@@ -141,7 +141,7 @@ function FornecedoresContent() {
       );
       toast.success(updated.active ? "Fornecedor ativado." : "Fornecedor desativado.");
     } catch (err: any) {
-      toast.error(err?.message || "Falha ao alterar status.");
+      toast.error(readableError(err, "Falha ao alterar status."));
     } finally {
       setBusyId(null);
     }

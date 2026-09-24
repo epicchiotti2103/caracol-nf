@@ -65,7 +65,9 @@ caracol-nf/
     status-badge.tsx             Badge bilingual de status
   lib/
     api.ts                       fetch helper com Bearer token
-    api-error.ts                 fetch que preserva `detail` estruturado (409 de duplicidade) — local do NF
+    api-error.ts                 fetch que preserva `detail` estruturado (409 de duplicidade) + `readableError` — local do NF; usado nos CRUDs admin e modais de edicao
+    fetch-all-invoices.ts        GET /nf/invoices paginado ate `total` (lista + lote)
+    number.ts                    `parseBrNumber` — parser unico de valor digitado ("1.234,56" / "1234.56")
     auth-context.tsx             Sessao + SSO (replicado nos 3 apps)
     config.ts                    API_BASE_URL, HUB_URL
     toast-context.tsx            Toasts globais
@@ -84,7 +86,7 @@ Todos sob `NEXT_PUBLIC_API_URL` (`https://trk.aeobr.com.br/api/v1`):
 - `POST /auth/refresh` — refresh do token (transparente via `lib/api.ts`)
 - `GET /hub/me/apps` — apps do user (gate de acesso)
 - `GET /nf/me/role` — `{role, pending_assigned_count, pending_my_approval_count?, can_delete_invoices?}` — papel intra-NF + qtde de NFs `em_analise` atribuidas ao user (usado pelo banner "aguardando voce"). `can_delete_invoices` (bool) libera a acao "Apagar NF"; **ausente = false** no front (`useCanDeleteInvoices`), entao com backend antigo a acao some sozinha.
-- `GET /nf/invoices` — lista (filtrada por papel no backend). Cada item carrega campos derivados: `is_vencida`, `days_overdue`, `approvals_pending` (array de slots faltantes — `['adm_campanha']`, `['admin']`, `['adm_campanha','admin']` ou `[]`)
+- `GET /nf/invoices?page=&limit=` — lista paginada `{items,total,page,limit}` (filtrada por papel no backend; teto de `limit` 200 hoje, 1000 depois do ajuste do tracker). O front sempre carrega todas as paginas (`lib/fetch-all-invoices.ts`). Cada item carrega campos derivados: `is_vencida`, `days_overdue`, `approvals_pending` (array de slots faltantes — `['adm_campanha']`, `['admin']`, `['adm_campanha','admin']` ou `[]`)
 - `GET /nf/invoices/{id}` — detalhe (inclui campos derivados acima + auditoria de aprovacoes duplas)
 - `GET /nf/invoices/{id}/pdf` — `{url}` assinada (5min)
 - `GET /nf/invoices/{id}/events` — timeline de auditoria. Itens `{event_type, from_value, to_value, actor: {id, name}, created_at}`. Tipos: `status_change`, `assignee_change`, `approval_added`, `paid_by_designated`, `notes_update`

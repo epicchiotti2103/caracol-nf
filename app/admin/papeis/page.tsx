@@ -15,7 +15,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { useCan } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetchStrict, readableError } from "@/lib/api-error";
 import type {
   PermCatalogItem,
   PermsMatrixResponse,
@@ -68,15 +68,17 @@ function PapeisContent() {
     setLoading(true);
     setError("");
     try {
-      const res: PermsMatrixResponse = await apiFetch("/perms/nf/matrix");
+      const res: PermsMatrixResponse = await apiFetchStrict("/perms/nf/matrix");
       setRoles(Array.isArray(res?.roles) ? res.roles : []);
       setCatalog(Array.isArray(res?.catalog) ? res.catalog : []);
       setMatrix(res?.matrix && typeof res.matrix === "object" ? res.matrix : {});
       setDirty(false);
     } catch (err: any) {
       setError(
-        err?.message ||
+        readableError(
+          err,
           "Falha ao carregar a matriz de permissoes. O backend de permissoes pode ainda nao estar no ar."
+        )
       );
     } finally {
       setLoading(false);
@@ -117,7 +119,7 @@ function PapeisContent() {
           roles.map((r) => [r, matrix[r] || {}])
         )
       };
-      const res: PermsMatrixResponse = await apiFetch("/perms/nf/matrix", {
+      const res: PermsMatrixResponse = await apiFetchStrict("/perms/nf/matrix", {
         method: "PUT",
         body: JSON.stringify(payload)
       });
@@ -128,7 +130,7 @@ function PapeisContent() {
       setDirty(false);
       toast.success("Matriz de permissoes salva.");
     } catch (err: any) {
-      toast.error(err?.message || "Falha ao salvar a matriz.");
+      toast.error(readableError(err, "Falha ao salvar a matriz."));
     } finally {
       setSaving(false);
     }

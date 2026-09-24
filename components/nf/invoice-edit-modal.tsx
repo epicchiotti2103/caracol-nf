@@ -21,6 +21,7 @@ import {
 import { DuplicidadePanel } from "@/components/nf/duplicidade-panel";
 import { readableError } from "@/lib/api-error";
 import type { Invoice, Supplier } from "@/types";
+import { parseBrNumber } from "@/lib/number";
 
 const MAX_BR_DATE_LEN = 10;
 
@@ -130,7 +131,7 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
     if (trimmedNumber !== (invoice.invoice_number || "")) {
       out.invoice_number = trimmedNumber;
     }
-    const parsed = parseFloat(amount.replace(",", "."));
+    const parsed = parseBrNumber(amount);
     const origAmount =
       invoice.amount != null ? Number(invoice.amount) : NaN;
     if (!isNaN(parsed) && parsed !== origAmount) {
@@ -191,7 +192,7 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
 
   const validate = (): string | null => {
     if (!invoiceNumber.trim()) return "Numero da NF obrigatorio";
-    const parsed = parseFloat(amount.replace(",", "."));
+    const parsed = parseBrNumber(amount);
     if (isNaN(parsed) || parsed <= 0)
       return "Valor deve ser maior que zero";
     if (!dueDate || dueDate.length !== MAX_BR_DATE_LEN)
@@ -341,7 +342,7 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
             <CompetenciaFields
               drafts={competencias}
               onChange={setCompetencias}
-              totalNf={parseFloat((amount || "").replace(",", ".")) || 0}
+              totalNf={parseBrNumber(amount) || 0}
               moeda={moeda}
               lang="pt"
               inputCls={inputCls}
@@ -352,7 +353,7 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
               onTagChange={setTagId}
               campanhas={campanhaLinks}
               onCampanhasChange={setCampanhaLinks}
-              totalNf={parseFloat((amount || "").replace(",", ".")) || undefined}
+              totalNf={parseBrNumber(amount) || undefined}
               moeda={moeda}
               supplierId={supplierId || undefined}
             />
@@ -366,7 +367,7 @@ export function InvoiceEditModal({ invoice, onClose, onSaved }: Props) {
             <DuplicidadePanel
               supplierId={supplierId}
               invoiceNumber={invoiceNumber}
-              amount={parseFloat((amount || "").replace(",", ".")) || 0}
+              amount={parseBrNumber(amount) || 0}
               competencias={competencias.map((c) => c.competencia)}
               moeda={moeda}
               excludeInvoiceId={invoice.id}

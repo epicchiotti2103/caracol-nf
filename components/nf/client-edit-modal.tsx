@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, X } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetchStrict, readableError } from "@/lib/api-error";
 import type {
   Client,
   ClientCreatePayload,
@@ -66,17 +66,17 @@ export function ClientEditModal({ client, onClose, onSaved }: Props) {
     try {
       const payload = buildPayload();
       const saved: Client = isEdit
-        ? await apiFetch(`/clients/${client!.id}`, {
+        ? await apiFetchStrict(`/clients/${client!.id}`, {
             method: "PATCH",
             body: JSON.stringify(payload)
           })
-        : await apiFetch(`/clients`, {
+        : await apiFetchStrict(`/clients`, {
             method: "POST",
             body: JSON.stringify(payload)
           });
       onSaved(saved);
     } catch (err: any) {
-      setError(err?.message || "Falha ao salvar cliente");
+      setError(readableError(err, "Falha ao salvar cliente"));
     } finally {
       setSaving(false);
     }

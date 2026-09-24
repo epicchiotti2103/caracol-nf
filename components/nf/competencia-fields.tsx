@@ -3,6 +3,7 @@
 import { Plus, X } from "lucide-react";
 import { fmtCurrency } from "@/lib/i18n";
 import type { NfCompetencia } from "@/types";
+import { parseBrNumber } from "@/lib/number";
 
 /**
  * Editor das competencias da NF a pagar.
@@ -48,7 +49,7 @@ export function buildCompetenciaOptions(
 
 export function parseValor(v: string | number | null | undefined): number {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-  const n = parseFloat(String(v ?? "").replace(",", "."));
+  const n = parseBrNumber(v);
   return Number.isFinite(n) ? n : 0;
 }
 

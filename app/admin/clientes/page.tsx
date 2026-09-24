@@ -16,7 +16,7 @@ import { AppShell } from "@/components/app-shell";
 import { ClientEditModal } from "@/components/nf/client-edit-modal";
 import { useCan } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetchStrict, readableError } from "@/lib/api-error";
 import type { Client, ClientEntity } from "@/types";
 
 type ActiveFilter = "active" | "inactive" | "all";
@@ -79,8 +79,8 @@ function ClientesContent() {
       let items: Client[] = [];
       if (activeFilter === "all") {
         const [resTrue, resFalse] = await Promise.all([
-          apiFetch(`/clients?${withActive(params, "true")}`),
-          apiFetch(`/clients?${withActive(params, "false")}`)
+          apiFetchStrict(`/clients?${withActive(params, "true")}`),
+          apiFetchStrict(`/clients?${withActive(params, "false")}`)
         ]);
         const a = Array.isArray(resTrue) ? resTrue : resTrue?.items || [];
         const b = Array.isArray(resFalse) ? resFalse : resFalse?.items || [];
@@ -88,14 +88,14 @@ function ClientesContent() {
           (x.name || "").localeCompare(y.name || "")
         );
       } else {
-        const res: { items: Client[] } | Client[] = await apiFetch(
+        const res: { items: Client[] } | Client[] = await apiFetchStrict(
           `/clients?${params.toString()}`
         );
         items = Array.isArray(res) ? res : res?.items || [];
       }
       setClients(items);
     } catch (err: any) {
-      setError(err?.message || "Falha ao carregar clientes.");
+      setError(readableError(err, "Falha ao carregar clientes."));
     } finally {
       setLoading(false);
     }
@@ -134,7 +134,7 @@ function ClientesContent() {
     if (!confirm(`Tem certeza que quer ${verb} "${c.name}"?`)) return;
     setBusyId(c.id);
     try {
-      const updated: Client = await apiFetch(
+      const updated: Client = await apiFetchStrict(
         `/clients/${c.id}/toggle-active`,
         { method: "PATCH" }
       );
@@ -143,7 +143,7 @@ function ClientesContent() {
       );
       toast.success(updated.active ? "Cliente ativado." : "Cliente desativado.");
     } catch (err: any) {
-      toast.error(err?.message || "Falha ao alterar status.");
+      toast.error(readableError(err, "Falha ao alterar status."));
     } finally {
       setBusyId(null);
     }

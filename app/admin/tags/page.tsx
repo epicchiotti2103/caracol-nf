@@ -6,7 +6,7 @@ import { AlertCircle, Loader2, Plus, RefreshCw, Tag as TagIcon } from "lucide-re
 import { AppShell } from "@/components/app-shell";
 import { useNfRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetchStrict, readableError } from "@/lib/api-error";
 import type { NfTag } from "@/types";
 
 export default function TagsPage() {
@@ -40,11 +40,11 @@ function TagsContent() {
     setLoading(true);
     setError("");
     try {
-      const res: { items: NfTag[] } | NfTag[] = await apiFetch("/nf/tags");
+      const res: { items: NfTag[] } | NfTag[] = await apiFetchStrict("/nf/tags");
       const items = Array.isArray(res) ? res : res?.items || [];
       setTags(items);
     } catch (err: any) {
-      setError(err?.message || "Falha ao carregar tags.");
+      setError(readableError(err, "Falha ao carregar tags."));
     } finally {
       setLoading(false);
     }
@@ -60,7 +60,7 @@ function TagsContent() {
     if (!name) return;
     setCreating(true);
     try {
-      const created: NfTag = await apiFetch("/nf/tags", {
+      const created: NfTag = await apiFetchStrict("/nf/tags", {
         method: "POST",
         body: JSON.stringify({ name })
       });
@@ -72,7 +72,7 @@ function TagsContent() {
       setNewName("");
       toast.success("Tag criada.");
     } catch (err: any) {
-      toast.error(err?.message || "Falha ao criar tag.");
+      toast.error(readableError(err, "Falha ao criar tag."));
     } finally {
       setCreating(false);
     }
@@ -81,7 +81,7 @@ function TagsContent() {
   const toggleActive = async (tag: NfTag) => {
     setBusyId(tag.id);
     try {
-      const updated: NfTag = await apiFetch(`/nf/tags/${tag.id}/toggle-active`, {
+      const updated: NfTag = await apiFetchStrict(`/nf/tags/${tag.id}/toggle-active`, {
         method: "PATCH"
       });
       setTags((prev) =>
@@ -91,7 +91,7 @@ function TagsContent() {
       );
       toast.success(updated?.active ?? !tag.active ? "Tag ativada." : "Tag desativada.");
     } catch (err: any) {
-      toast.error(err?.message || "Falha ao atualizar tag.");
+      toast.error(readableError(err, "Falha ao atualizar tag."));
     } finally {
       setBusyId(null);
     }

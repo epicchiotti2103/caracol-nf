@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ChevronDown, Loader2, X } from "lucide-react";
-import { apiFetch } from "@/lib/api";
+import { apiFetchStrict, readableError } from "@/lib/api-error";
 import type {
   Supplier,
   SupplierCreatePayload,
@@ -50,13 +50,13 @@ export function SupplierEditModal({ supplier, onClose, onSaved }: Props) {
       setUsersError("");
       try {
         const res: { items: NfUser[]; total: number } | NfUser[] =
-          await apiFetch("/nf/users");
+          await apiFetchStrict("/nf/users");
         const items = Array.isArray(res) ? res : res?.items || [];
         if (cancelled) return;
         setUsers(items);
       } catch (err: any) {
         if (cancelled) return;
-        setUsersError(err?.message || "Falha ao carregar usuarios");
+        setUsersError(readableError(err, "Falha ao carregar usuarios"));
       } finally {
         if (!cancelled) setLoadingUsers(false);
       }
@@ -168,17 +168,17 @@ export function SupplierEditModal({ supplier, onClose, onSaved }: Props) {
     try {
       const payload = buildPayload();
       const saved: Supplier = isEdit
-        ? await apiFetch(`/suppliers/${supplier!.id}`, {
+        ? await apiFetchStrict(`/suppliers/${supplier!.id}`, {
             method: "PATCH",
             body: JSON.stringify(payload)
           })
-        : await apiFetch(`/suppliers`, {
+        : await apiFetchStrict(`/suppliers`, {
             method: "POST",
             body: JSON.stringify(payload)
           });
       onSaved(saved);
     } catch (err: any) {
-      setError(err?.message || "Falha ao salvar fornecedor");
+      setError(readableError(err, "Falha ao salvar fornecedor"));
     } finally {
       setSaving(false);
     }

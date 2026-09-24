@@ -7,7 +7,7 @@ import { AlertCircle, Loader2, RefreshCw, Search, ShieldCheck, Users } from "luc
 import { AppShell } from "@/components/app-shell";
 import { useCan } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
-import { apiFetch } from "@/lib/api";
+import { apiFetchStrict, readableError } from "@/lib/api-error";
 import type { NfRole, NfUser } from "@/types";
 
 const ROLES: { value: NfRole; label: string }[] = [
@@ -50,11 +50,11 @@ function UsuariosNfContent() {
     setLoading(true);
     setError("");
     try {
-      const res: { items: NfUser[]; total: number } | NfUser[] = await apiFetch("/nf/users");
+      const res: { items: NfUser[]; total: number } | NfUser[] = await apiFetchStrict("/nf/users");
       const items = Array.isArray(res) ? res : res?.items || [];
       setUsers(items);
     } catch (err: any) {
-      setError(err?.message || "Falha ao carregar usuarios.");
+      setError(readableError(err, "Falha ao carregar usuarios."));
     } finally {
       setLoading(false);
     }
@@ -81,7 +81,7 @@ function UsuariosNfContent() {
   const changeRole = async (userId: string, newRole: NfRole | null) => {
     setBusyId(userId);
     try {
-      const res: NfUser = await apiFetch(`/nf/users/${userId}/role`, {
+      const res: NfUser = await apiFetchStrict(`/nf/users/${userId}/role`, {
         method: "PUT",
         body: JSON.stringify({ role: newRole })
       });
@@ -90,7 +90,7 @@ function UsuariosNfContent() {
       );
       toast.success(newRole ? "Papel atualizado." : "Papel removido.");
     } catch (err: any) {
-      toast.error(err?.message || "Falha ao atualizar papel.");
+      toast.error(readableError(err, "Falha ao atualizar papel."));
     } finally {
       setBusyId(null);
     }

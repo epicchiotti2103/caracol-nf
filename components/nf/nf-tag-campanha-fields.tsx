@@ -10,6 +10,7 @@ import type {
   NfCampanhaLink,
   NfTag
 } from "@/types";
+import { parseBrNumber } from "@/lib/number";
 
 // Linha de vinculo no estado do form (valor como string pra mascara monetaria
 // consistente com o resto do NF — vira number so no submit).
@@ -48,7 +49,7 @@ export function draftsToPayload(
     .filter((d) => d.campanha_id)
     .map((d) => ({
       campanha_id: d.campanha_id,
-      valor: parseFloat((d.valor || "0").replace(",", ".")) || 0
+      valor: parseBrNumber(d.valor) || 0
     }));
 }
 
@@ -294,7 +295,7 @@ export function NfTagCampanhaFields({
   const somaAloc = useMemo(
     () =>
       campanhas.reduce(
-        (s, c) => s + (parseFloat((c.valor || "0").replace(",", ".")) || 0),
+        (s, c) => s + (parseBrNumber(c.valor) || 0),
         0
       ),
     [campanhas]

@@ -40,6 +40,7 @@ import { DeleteInvoiceModal } from "@/components/nf/delete-invoice-modal";
 import { fmtCurrency, fmtDate, fmtDateTime, fmtRefMonth } from "@/lib/i18n";
 import { CONTAS_POR_MOEDA, CONTA_DEFAULT } from "@/lib/contas";
 import type { Invoice, NfCampanhaLink, NfUser, Supplier } from "@/types";
+import { parseBrNumber } from "@/lib/number";
 
 type Action = "approve_adm" | "approve_admin" | "reject" | "pay";
 
@@ -57,7 +58,7 @@ function todayISO(): string {
 
 // Normaliza "40,00" / "1.234,56" -> numero. Igual ao parse do batch modal.
 function parseFee(raw: string): number {
-  const n = parseFloat(raw.replace(/\./g, "").replace(",", "."));
+  const n = parseBrNumber(raw);
   return Number.isFinite(n) ? n : 0;
 }
 
