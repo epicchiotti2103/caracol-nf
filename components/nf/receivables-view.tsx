@@ -22,6 +22,7 @@ import { apiFetch } from "@/lib/api";
 import { fmtCurrency, fmtDate, fmtDateOnly, fmtRefMonth } from "@/lib/i18n";
 import { useNfRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
+import { AuditHistoryButton } from "@/components/nf/audit-history";
 import { ReceivableEditModal } from "@/components/nf/receivable-edit-modal";
 import { TagQuickEdit } from "@/components/nf/tag-quick-edit";
 import { ReceivableReceiveModal } from "@/components/nf/receivable-receive-modal";
@@ -769,6 +770,7 @@ function ReceivableRow({
       </td>
       <td className="whitespace-nowrap px-5 py-4">
         <div className="flex items-center gap-1.5">
+          <AuditHistoryButton entidade="nf_receivable" entidadeId={r.id} compact />
           {r.pdf_path && (
             <button
               onClick={() => onOpenPdf(r)}

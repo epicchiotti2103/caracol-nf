@@ -37,6 +37,7 @@ import {
 } from "@/lib/api-error";
 import { DuplicateConfirmModal } from "@/components/nf/duplicate-confirm-modal";
 import { DeleteInvoiceModal } from "@/components/nf/delete-invoice-modal";
+import { AuditHistoryButton } from "@/components/nf/audit-history";
 import { fmtCurrency, fmtDate, fmtDateTime, fmtRefMonth } from "@/lib/i18n";
 import { CONTAS_POR_MOEDA, CONTA_DEFAULT } from "@/lib/contas";
 import type { Invoice, NfCampanhaLink, NfUser, Supplier } from "@/types";
@@ -639,6 +640,7 @@ function InvoiceDetail({ id }: { id: string }) {
           <h1 className="text-2xl font-semibold text-foreground">{invoice.invoice_number}</h1>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
+          <AuditHistoryButton entidade="nf_invoice" entidadeId={invoice.id} lang={lang} />
           {/* Apagar NF — so com `can_delete_invoices` do backend e NF nao paga */}
           {canDeleteInvoices && invoice.status !== "paga" && (
             <button

@@ -121,6 +121,8 @@ Quem tem `can_delete_invoices: true` no `GET /nf/me/role` ve a acao **"Apagar NF
 
 A lista "A pagar" tambem tem a coluna **"Pago em"** (`paid_at`, ordenavel; "Paid On" pra publisher) e a lista "A receber" a coluna **"Recebido em"** (`received_at`). As duas usam `fmtDateOnly` de `lib/i18n.ts` — formata so a parte da data do ISO, sem conversao de timezone (senao um `T00:00:00+00:00` volta um dia em BRT).
 
+**Historico de alteracoes** (`components/nf/audit-history.tsx`): botao "Historico" no header do detalhe `/invoice/[id]` (entidade `nf_invoice`) e icone de relogio na linha da aba A receber (entidade `nf_receivable`). Abre modal com linha do tempo vinda de `GET /audit?entidade=<...>&entidade_id=<uuid>` → `{items, total, disponivel}` (desc): data/hora local, quem (`user_email`), acao, campo e antes → depois (moeda/data formatadas; objetos viram `chave: valor`). `disponivel:false` → "Historico em implantacao". Visivel so pra nf_role admin/adm_campanha ou hub admin; 403 esconde o botao.
+
 Campos de auditoria: `approval_adm_campanha_by/at`, `approval_admin_by/at`, `paid_by/at`, `paid_by_assignee_id`. Notas em 2 campos (`notes_supplier`, `notes_internal`) seguem como antes, editaveis via `PATCH /nf/invoices/{id}/notes`.
 
 Campos derivados retornados em `GET /nf/invoices*`: `is_vencida` (bool), `days_overdue` (number), `approvals_pending` (array com slots faltantes).

@@ -295,3 +295,7 @@ Se voce e uma IA chegando aqui sem contexto:
 ### Link direto pra NF a receber
 
 - `/receber` — atalho que redireciona pra `/?view=receber` (aba A receber). **Link direto por NF**: `/receber?id=<uuid>` (ou `/?view=receber&id=<uuid>`) carrega a lista completa, rola ate a linha e destaca por ~6s; o `id` sai da URL em seguida. Id inexistente/apagado → toast info discreto. Usado pelo painel de fechamento do Campanhas.
+
+## Historico de alteracoes (audit_log)
+
+**Historico de alteracoes** (`components/nf/audit-history.tsx`): botao "Historico" no header do detalhe `/invoice/[id]` (entidade `nf_invoice`) e icone de relogio na linha da aba A receber (entidade `nf_receivable`). Abre modal com linha do tempo vinda de `GET /audit?entidade=<...>&entidade_id=<uuid>` → `{items, total, disponivel}` (desc): data/hora local, quem (`user_email`), acao, campo e antes → depois (moeda/data formatadas; objetos viram `chave: valor`). `disponivel:false` → "Historico em implantacao". Visivel so pra nf_role admin/adm_campanha ou hub admin; 403 esconde o botao.
