@@ -541,3 +541,75 @@ export interface LinkSuggestionApplyResponse {
   linked_campaign_ids: string[];   // inclui os que ja estavam vinculados
   added?: { campaign_id: string; valor_alocado: number }[];
 }
+
+// ── Recebimento Wave (lote de fechamentos) ──────────────────────────────────
+// Backend: /api/v1/nf/fechamento-recebimentos (migration 082). Um deposito do
+// parceiro (Wave) quita N fechamentos (campanha x mes), sem NF e sem parcial.
+export type FechamentoRecebStatus = "pendente" | "recebido" | "coberto_nf";
+
+export interface FechamentoRecebimentoRef {
+  id: string;
+  received_at: string;      // YYYY-MM-DD (date-only)
+  amount: number;
+  conta: string;
+}
+
+export interface FechamentoPendencia {
+  fechamento_id: string;
+  campanha_id: string;
+  campanha_name: string | null;
+  campanha_codigo: string | null;
+  mes_referencia: string;   // YYYY-MM-01
+  moeda: Moeda;
+  a_receber: number | null;
+  client_id: string;
+  client_name: string | null;
+  locked: boolean;
+  custo_total: number | null;
+  margem: number | null;
+  status: FechamentoRecebStatus;
+  nf_receivable_vinculada: boolean;
+  selecionavel: boolean;
+  dias_em_aberto: number | null;
+  recebimento: FechamentoRecebimentoRef | null;
+}
+
+export interface FechamentoPendenciasResponse {
+  items: FechamentoPendencia[];
+  totais: {
+    pendente: Partial<Record<Moeda, number>>;
+    recebido: Partial<Record<Moeda, number>>;
+  };
+}
+
+export interface FechamentoRecebimentoItem {
+  fechamento_id: string;
+  campanha_id: string;
+  campanha_name: string | null;
+  campanha_codigo: string | null;
+  mes_referencia: string;
+  moeda: Moeda;
+  a_receber: number | null;
+}
+
+export interface FechamentoRecebimento {
+  id: string;
+  client_id: string;
+  client_name: string | null;
+  received_at: string;      // YYYY-MM-DD
+  amount: number;
+  moeda: Moeda;
+  conta: string;
+  has_proof: boolean;
+  notes: string | null;
+  created_by: string | null;
+  created_at: string;
+  esperado: number;
+  diferenca: number;        // recebido - esperado
+  fechamentos: FechamentoRecebimentoItem[];
+}
+
+export interface FechamentoRecebimentosListResponse {
+  items: FechamentoRecebimento[];
+  total: number;
+}
