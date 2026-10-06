@@ -10,10 +10,15 @@ import { CONTAS_POR_MOEDA, CONTA_DEFAULT } from "@/lib/contas";
 import {
   STALE_CODES,
   agingClass,
+  ajustesPayload,
   campanhaLabel,
   parseRecebimentoError,
-  todayISO
+  residuoClass,
+  somaAjustes,
+  todayISO,
+  type AjusteDraft
 } from "@/lib/fechamento-recebimentos";
+import { AjustesEditor } from "@/components/nf/ajustes-editor";
 import type { FechamentoPendencia, Moeda } from "@/types";
 
 const PROOF_MAX_MB = 10;
@@ -53,6 +58,7 @@ export function WaveReceiveModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [flagged, setFlagged] = useState<Set<string>>(new Set());
+  const [ajustes, setAjustes] = useState<AjusteDraft[]>([]);
 
   const selectedItems = selecionaveis.filter((i) => selected.has(i.fechamento_id));
   const first = selectedItems[0];
@@ -84,6 +90,10 @@ export function WaveReceiveModal({
   }, [esperado, valorTouched]);
   const recebido = parseBrNumberOr0(valor);
   const diferenca = recebido - esperado;
+  const { custos, provisionados } = somaAjustes(ajustes);
+  const temAjuste = custos > 0 || provisionados > 0;
+  const deveriaCair = esperado - custos - provisionados;
+  const residuo = recebido - deveriaCair;
 
   const isCompatible = (i: FechamentoPendencia) =>
     !first || (i.client_id === lockClient && i.moeda === moeda);
@@ -132,6 +142,8 @@ export function WaveReceiveModal({
       return setError("Comprovante deve ser PNG, JPEG ou PDF.");
     if (file && file.size > PROOF_MAX_MB * 1024 * 1024)
       return setError("Comprovante excede 10MB.");
+    const aj = ajustesPayload(ajustes);
+    if (!aj.ok) return setError(aj.error);
 
     const fd = new FormData();
     fd.append("client_id", first!.client_id);
@@ -142,6 +154,7 @@ export function WaveReceiveModal({
     fd.append("conta", conta);
     if (notes.trim()) fd.append("notes", notes.trim());
     if (file) fd.append("proof", file);
+    if (aj.ajustes.length > 0) fd.append("ajustes", JSON.stringify(aj.ajustes));
 
     setSaving(true);
     try {
@@ -348,6 +361,16 @@ export function WaveReceiveModal({
             </div>
           )}
 
+          <div className="mb-3 rounded-lg border border-border px-3 py-2">
+            <p className="mb-1.5 text-xs font-semibold text-muted">
+              Ajustes (opcional){" "}
+              <span className="font-normal">
+                — custo descontado do deposito ou parte provisionada que ainda vai cair
+              </span>
+            </p>
+            <AjustesEditor value={ajustes} onChange={setAjustes} sym={sym} disabled={saving} />
+          </div>
+
           <div className="mb-3 space-y-1 rounded-lg bg-background px-3 py-2 text-sm">
             <div className="flex justify-between text-muted">
               <span>
@@ -356,27 +379,51 @@ export function WaveReceiveModal({
               </span>
               <span className="font-mono">{fmtCurrency(esperado, moeda, "pt")}</span>
             </div>
+            {temAjuste && (
+              <>
+                {custos > 0 && (
+                  <div className="flex justify-between text-muted">
+                    <span>− Custos</span>
+                    <span className="font-mono">{fmtCurrency(custos, moeda, "pt")}</span>
+                  </div>
+                )}
+                {provisionados > 0 && (
+                  <div className="flex justify-between text-muted">
+                    <span>− Provisionados</span>
+                    <span className="font-mono">{fmtCurrency(provisionados, moeda, "pt")}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-foreground">
+                  <span>Deveria cair</span>
+                  <span className="font-mono">{fmtCurrency(deveriaCair, moeda, "pt")}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between text-muted">
               <span>Recebido</span>
               <span className="font-mono">{fmtCurrency(recebido, moeda, "pt")}</span>
             </div>
             <div className="flex justify-between border-t border-border pt-1 font-semibold text-foreground">
-              <span>Diferenca (recebido − esperado)</span>
+              <span>
+                {temAjuste ? "Residuo (recebido − deveria cair)" : "Diferenca (recebido − esperado)"}
+              </span>
               <span
                 className={`font-mono ${
-                  selectedItems.length === 0 || Math.abs(diferenca) < 0.005
-                    ? "text-emerald-400"
-                    : diferenca < 0
-                      ? "text-danger"
-                      : "text-amber-300"
+                  selectedItems.length === 0 ? "text-emerald-400" : residuoClass(temAjuste ? residuo : diferenca)
                 }`}
               >
-                {fmtCurrency(diferenca, moeda, "pt")}
+                {fmtCurrency(temAjuste ? residuo : diferenca, moeda, "pt")}
               </span>
             </div>
-            {selectedItems.length > 0 && Math.abs(diferenca) >= 0.005 && (
+            {selectedItems.length > 0 && Math.abs(temAjuste ? residuo : diferenca) >= 0.005 && (
               <p className="pt-1 text-[11px] text-muted">
-                Diferenca e so informativa (cambio/taxa). No caixa vale o valor recebido.
+                {temAjuste ? "Residuo" : "Diferenca"} e so informativo (cambio/taxa). No caixa vale o
+                valor recebido.
+              </p>
+            )}
+            {provisionados > 0 && (
+              <p className="pt-1 text-[11px] text-muted">
+                Provisionado vira receita pendente no Gerencial ate ser marcado como recebido.
               </p>
             )}
           </div>

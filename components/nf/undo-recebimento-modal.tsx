@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { AlertTriangle, Loader2, Undo2, X } from "lucide-react";
-import { apiFetchStrict, ApiHttpError, readableError } from "@/lib/api-error";
+import { apiFetchStrict, ApiHttpError } from "@/lib/api-error";
+import { parseRecebimentoError } from "@/lib/fechamento-recebimentos";
 import { fmtCurrency, fmtDateOnly } from "@/lib/i18n";
 import { contaLabel } from "@/lib/contas";
 import type { FechamentoRecebimento } from "@/types";
@@ -36,7 +37,12 @@ export function UndoRecebimentoModal({
         onDone();
         return;
       }
-      setError(readableError(err, "Falha ao desfazer o pagamento."));
+      const e = parseRecebimentoError(err, "Falha ao desfazer o pagamento.");
+      setError(
+        e.code === "provisionado_recebido"
+          ? "Um provisionado deste lote ja foi marcado como recebido. Desmarque o recebimento no Gerencial antes de desfazer o lote."
+          : e.message
+      );
     } finally {
       setBusy(false);
     }
@@ -59,7 +65,8 @@ export function UndoRecebimentoModal({
             <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-300" />
             <p className="text-xs text-amber-200">
               O lote some do historico e {n === 1 ? "o fechamento volta" : `os ${n} fechamentos voltam`} a
-              ficar pendente{n === 1 ? "" : "s"}. O Gerencial deixa de contar esse recebimento no caixa.
+              ficar pendente{n === 1 ? "" : "s"}. O Gerencial deixa de contar esse recebimento no caixa
+              {(lote.ajustes?.length || 0) > 0 && " e os ajustes do lote (e seus lancamentos) sao apagados"}.
             </p>
           </div>
           <dl className="grid grid-cols-2 gap-y-1 text-xs">

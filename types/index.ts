@@ -579,7 +579,24 @@ export interface FechamentoPendenciasResponse {
   totais: {
     pendente: Partial<Record<Moeda, number>>;
     recebido: Partial<Record<Moeda, number>>;
+    /** Provisionados (ajustes) ainda nao recebidos dos lotes ativos (migration 083). */
+    provisionado_pendente?: Partial<Record<Moeda, number>>;
   };
+}
+
+export type AjusteTipo = "custo" | "provisionado";
+export type AjusteStatus = "pago" | "pendente" | "recebido" | "sem_transaction";
+
+/** Ajuste de um lote de recebimento Wave (custo descontado ou provisionado a receber). */
+export interface FechamentoRecebimentoAjuste {
+  id: string;
+  tipo: AjusteTipo;
+  descricao: string;
+  valor: number;
+  gerencial_transaction_id: string | null;
+  status: AjusteStatus;
+  recebido_em: string | null; // timestamp -> formatar com fmtDateOnly
+  created_at: string;
 }
 
 export interface FechamentoRecebimentoItem {
@@ -607,6 +624,13 @@ export interface FechamentoRecebimento {
   esperado: number;
   diferenca: number;        // recebido - esperado
   fechamentos: FechamentoRecebimentoItem[];
+  // Ajustes (migration 083). Opcionais: backend antigo nao manda.
+  ajustes?: FechamentoRecebimentoAjuste[];
+  total_custos?: number;
+  total_provisionado?: number;
+  provisionado_pendente?: number;
+  deveria_cair?: number;    // esperado - custos - provisionados
+  residuo?: number;         // amount - deveria_cair
 }
 
 export interface FechamentoRecebimentosListResponse {

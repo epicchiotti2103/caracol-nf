@@ -14,6 +14,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import { WaveReceiveModal } from "@/components/nf/wave-receive-modal";
 import { UndoRecebimentoModal } from "@/components/nf/undo-recebimento-modal";
+import { LoteAjustes } from "@/components/nf/lote-ajustes";
 import { useNfRole } from "@/lib/nf-role-context";
 import { useToast } from "@/lib/toast-context";
 import { apiFetchStrict, readableError } from "@/lib/api-error";
@@ -213,13 +214,14 @@ function PagamentosWaveContent() {
       ) : (
         <>
           {/* Totais por moeda */}
-          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-5">
             {MOEDAS.map((m) => (
               <TotalCard key={`p-${m}`} label={`Pendente ${m}`} value={totais.pendente?.[m] || 0} moeda={m} tone="pend" />
             ))}
             {MOEDAS.map((m) => (
               <TotalCard key={`r-${m}`} label={`Recebido ${m}`} value={totais.recebido?.[m] || 0} moeda={m} tone="ok" />
             ))}
+            <ProvisionadoCard valores={totais.provisionado_pendente || {}} />
           </div>
 
           {/* Conta corrente */}
@@ -340,6 +342,13 @@ function PagamentosWaveContent() {
                             ))}
                           </ul>
                           {l.notes && <p className="mt-1 text-[11px] italic text-muted">{l.notes}</p>}
+                          <LoteAjustes
+                            lote={l}
+                            onChanged={(msg) => {
+                              toast.success(msg);
+                              load();
+                            }}
+                          />
                         </td>
                         <td
                           className={`whitespace-nowrap px-4 py-2.5 text-right font-mono text-xs ${
@@ -476,6 +485,29 @@ function TotalCard({
       >
         {fmtCurrency(value, moeda, "pt")}
       </p>
+    </div>
+  );
+}
+
+function ProvisionadoCard({ valores }: { valores: Partial<Record<Moeda, number>> }) {
+  const lista = MOEDAS.filter((m) => (valores[m] || 0) > 0.005);
+  return (
+    <div
+      className="col-span-2 rounded-xl border border-border bg-surface px-4 py-3 lg:col-span-1"
+      title="Parte retida pelo parceiro nos lotes (ajuste provisionado) que ainda nao caiu"
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">
+        Provisionado pendente
+      </p>
+      {lista.length === 0 ? (
+        <p className="mt-1 font-mono text-lg font-semibold text-muted">—</p>
+      ) : (
+        lista.map((m) => (
+          <p key={m} className="mt-1 font-mono text-lg font-semibold text-amber-300">
+            {fmtCurrency(valores[m] || 0, m, "pt")}
+          </p>
+        ))
+      )}
     </div>
   );
 }
