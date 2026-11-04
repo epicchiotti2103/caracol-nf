@@ -4,6 +4,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import { ToastProvider } from "@/lib/toast-context";
 import { BootstrapGate } from "@/components/nf/bootstrap-gate";
 import { AssistWidget } from "@/components/assist-widget";
+import { SessionExpiredModal } from "@/components/session-expired-modal";
 
 export const metadata: Metadata = {
   title: "Caracol NF",
@@ -23,6 +24,7 @@ export default function RootLayout({
             <BootstrapGate>{children}</BootstrapGate>
           </ToastProvider>
           <AssistWidget app="nf" />
+          <SessionExpiredModal />
         </AuthProvider>
       </body>
     </html>
