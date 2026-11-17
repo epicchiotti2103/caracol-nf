@@ -47,6 +47,7 @@ Uma NF a pagar pode cobrir **varios meses de competencia**. No form de criar (`/
   - `duplicate_number` → **bloqueio duro**, sem botao de forcar: corrija o numero da nota.
   - `duplicate_warning` (cadastro) → lista os conflitos + **"Cadastrar mesmo assim"** (reenvia com `confirm_duplicate=true`).
   - `duplicate_payment_warning` (pagamento individual e em lote) → lista as NFs pagas que sobrepoem a competencia e avisa que **marcar como paga e irreversivel**; "Pagar mesmo assim" reenvia com `confirm_duplicate=true`.
+  - **Aviso antecipado no lote**: o modal "Pagar em lote" consulta `GET /nf/payment-batches/duplicate-check?invoice_ids=...` a cada mudanca de selecao (debounce 300ms) e mostra banner vermelho + badge "duplicada?" nas linhas em conflito (competencia ja paga ou 2 NFs do mesmo fornecedor/mes no lote). Nao bloqueia; o 409 no Pagar continua como 2a barreira. Falha em silencio se o endpoint nao existir.
 - O `detail` desses 409 e um objeto — o `apiFetch` compartilhado transformaria em `[object Object]`, entao esses fluxos usam `lib/api-error.ts` (`apiFetchStrict` + `duplicateDetail` + `readableError`), **local do NF**, sem tocar no `lib/api.ts` replicado. So os 3 codigos conhecidos ganham modal; qualquer outro erro cai em mensagem legivel.
 
 ### Tag + campanhas nos forms de NF

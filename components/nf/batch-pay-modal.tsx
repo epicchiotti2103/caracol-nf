@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { X, Loader2, Upload, AlertCircle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { X, Loader2, Upload, AlertCircle, AlertTriangle } from "lucide-react";
+import { apiFetch } from "@/lib/api";
 import { fetchAllInvoices } from "@/lib/fetch-all-invoices";
 import { parseBrNumberOr0 } from "@/lib/number";
 import {
@@ -22,6 +23,32 @@ const PROOF_TYPES = ["image/png", "image/jpeg", "application/pdf"];
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Pre-check de duplicidade (GET /nf/payment-batches/duplicate-check).
+// `no_lote: true` = duas selecionadas do mesmo fornecedor cobrem o mesmo mes
+// (invoice_id = a selecionada). Sem `no_lote` = NF JA PAGA (invoice_id/number
+// = a paga) cobrindo a competencia de uma selecionada (`conflita_com`).
+interface DupOverlap {
+  invoice_id: string;
+  invoice_number?: string | null;
+  competencia?: string | null;
+  valor?: number | null;
+  amount?: number | null;
+  status?: string | null;
+  no_lote?: boolean;
+  conflita_com?: string | null;
+}
+
+interface DupWarning {
+  key: string;
+  text: string;
+}
+
+function fmtComp(c?: string | null): string {
+  if (!c) return "?";
+  const m = /^(\d{4})-(\d{2})/.exec(c);
+  return m ? `${m[2]}/${m[1]}` : c;
 }
 
 function moedaOf(inv: Invoice): Moeda {
@@ -49,6 +76,11 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
   const [saving, setSaving] = useState(false);
   // 409 `duplicate_payment_warning` do lote (competencia ja paga).
   const [dupDetail, setDupDetail] = useState<DuplicateDetail | null>(null);
+  // Aviso antecipado: conflitos detectados assim que a selecao muda (antes
+  // de transferir/anexar). Nao bloqueia — o 409 no POST segue como 2a barreira.
+  const [overlaps, setOverlaps] = useState<DupOverlap[]>([]);
+  const [checking, setChecking] = useState(false);
+  const checkSeq = useRef(0);
 
   useEffect(() => {
     (async () => {
@@ -73,6 +105,88 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
     return parseBrNumberOr0(fee);
   }, [fee]);
   const totalSaida = somaNfs + feeNum;
+
+  // Chave estavel da selecao (so ids da moeda atual, ordenados).
+  const selKey = useMemo(
+    () => selectedInvoices.map((i) => i.id).sort().join(","),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selected, aprovadas, moeda]
+  );
+
+  useEffect(() => {
+    const seq = ++checkSeq.current;
+    if (!selKey) {
+      setOverlaps([]);
+      setChecking(false);
+      return;
+    }
+    const ctrl = new AbortController();
+    setChecking(true);
+    const t = setTimeout(async () => {
+      try {
+        const res: { overlaps?: DupOverlap[] } | null = await apiFetch(
+          `/nf/payment-batches/duplicate-check?invoice_ids=${encodeURIComponent(selKey)}`,
+          { signal: ctrl.signal }
+        );
+        if (seq !== checkSeq.current) return;
+        setOverlaps(Array.isArray(res?.overlaps) ? res!.overlaps : []);
+      } catch {
+        // Backend ainda sem o endpoint / erro de rede: falha em silencio.
+        if (seq !== checkSeq.current) return;
+        setOverlaps([]);
+      } finally {
+        if (seq === checkSeq.current) setChecking(false);
+      }
+    }, 300);
+    return () => {
+      clearTimeout(t);
+      ctrl.abort();
+    };
+  }, [selKey]);
+
+  // Avisos legiveis + ids das selecionadas em conflito (pra badge na lista).
+  const { warnings, conflictIds } = useMemo(() => {
+    const byId = new Map(aprovadas.map((i) => [i.id, i]));
+    const selIds = new Set(selKey ? selKey.split(",") : []);
+    const ids = new Set<string>();
+    const out: DupWarning[] = [];
+    const numOf = (id: string) => byId.get(id)?.invoice_number || id.slice(0, 8);
+
+    // Ja pagas
+    for (const o of overlaps) {
+      if (o.no_lote || !o.conflita_com || !selIds.has(o.conflita_com)) continue;
+      ids.add(o.conflita_com);
+      const v = o.valor ?? o.amount;
+      out.push({
+        key: `pago:${o.conflita_com}:${o.invoice_id}:${o.competencia}`,
+        text: `NF ${numOf(o.conflita_com)} — competência ${fmtComp(o.competencia)} já paga na NF ${
+          o.invoice_number || o.invoice_id.slice(0, 8)
+        }${v != null ? ` (${fmtCurrency(v, moeda, "pt")})` : ""}`
+      });
+    }
+
+    // Dentro do proprio lote: agrupa por fornecedor + competencia
+    const grupos = new Map<string, { comp: string; nums: string[] }>();
+    for (const o of overlaps) {
+      if (!o.no_lote || !selIds.has(o.invoice_id)) continue;
+      ids.add(o.invoice_id);
+      const inv = byId.get(o.invoice_id);
+      const forn = inv?.supplier_id || inv?.supplier_name || "?";
+      const k = `${forn}|${(o.competencia || "").slice(0, 7)}`;
+      const g = grupos.get(k) || { comp: fmtComp(o.competencia), nums: [] };
+      const n = numOf(o.invoice_id);
+      if (!g.nums.includes(n)) g.nums.push(n);
+      grupos.set(k, g);
+    }
+    for (const [k, g] of Array.from(grupos.entries())) {
+      const lista =
+        g.nums.length > 1
+          ? `NF ${g.nums.slice(0, -1).join(", NF ")} e NF ${g.nums[g.nums.length - 1]}`
+          : `NF ${g.nums[0]}`;
+      out.push({ key: `lote:${k}`, text: `${lista} cobrem ${g.comp} no mesmo lote` });
+    }
+    return { warnings: out, conflictIds: ids };
+  }, [overlaps, aprovadas, selKey, moeda]);
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -182,6 +296,31 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
           ))}
         </div>
 
+        {/* Aviso antecipado de pagamento duplicado — antes do comprovante/Pagar */}
+        {warnings.length > 0 && (
+          <div
+            role="alert"
+            className="border-b border-danger/30 bg-danger/10 px-5 py-3"
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-danger" />
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-danger">
+                  Possível pagamento duplicado ({conflictIds.size} NF{conflictIds.size === 1 ? "" : "s"})
+                </p>
+                <ul className="mt-1 max-h-28 space-y-0.5 overflow-y-auto text-xs text-foreground">
+                  {warnings.map((w) => (
+                    <li key={w.key}>• {w.text}</li>
+                  ))}
+                </ul>
+                <p className="mt-1.5 text-[11px] text-muted">
+                  Confira antes de transferir. Dá pra pagar mesmo assim — o sistema pede confirmação de novo no Pagar.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Lista de aprovadas */}
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3">
           {loading ? (
@@ -194,13 +333,29 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
             </p>
           ) : (
             <>
-              <button onClick={toggleAll} className="mb-2 text-xs text-primary hover:underline">
-                {allSelected ? "Desmarcar todas" : "Selecionar todas"}
-              </button>
+              <div className="mb-2 flex items-center justify-between">
+                <button onClick={toggleAll} className="text-xs text-primary hover:underline">
+                  {allSelected ? "Desmarcar todas" : "Selecionar todas"}
+                </button>
+                {checking && (
+                  <span className="flex items-center gap-1 text-[11px] text-muted">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    verificando duplicidade…
+                  </span>
+                )}
+              </div>
               <ul className="space-y-1.5">
-                {doMoeda.map((inv) => (
+                {doMoeda.map((inv) => {
+                  const conflito = selected.has(inv.id) && conflictIds.has(inv.id);
+                  return (
                   <li key={inv.id}>
-                    <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-background px-3 py-2 hover:border-primary/40">
+                    <label
+                      className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 ${
+                        conflito
+                          ? "border-danger/60 bg-danger/10 hover:border-danger"
+                          : "border-border bg-background hover:border-primary/40"
+                      }`}
+                    >
                       <input
                         type="checkbox"
                         checked={selected.has(inv.id)}
@@ -208,7 +363,13 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
                         className="h-4 w-4 accent-primary"
                       />
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-foreground">
+                        <p className="flex items-center gap-1.5 truncate text-sm text-foreground">
+                          {conflito && (
+                            <span className="inline-flex flex-shrink-0 items-center gap-0.5 rounded bg-danger px-1.5 py-0.5 text-[10px] font-bold uppercase text-white">
+                              <AlertTriangle className="h-3 w-3" />
+                              duplicada?
+                            </span>
+                          )}
                           {inv.invoice_number}
                           {inv.supplier_name ? ` · ${inv.supplier_name}` : ""}
                         </p>
@@ -221,7 +382,8 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
                       </span>
                     </label>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             </>
           )}
@@ -329,6 +491,7 @@ export function BatchPayModal({ onClose, onPaid }: { onClose: () => void; onPaid
               className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-black hover:bg-primary/90 disabled:opacity-50"
             >
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+              {!saving && warnings.length > 0 && <AlertTriangle className="h-4 w-4" />}
               {saving ? "Pagando…" : `Pagar ${selectedInvoices.length || ""} em lote`}
             </button>
           </div>
